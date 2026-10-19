@@ -1,0 +1,53 @@
+--- main.c
++++ main.c
+@@ -54,7 +54,9 @@
+ 
+ #include <btstack_config.h>
+ 
++#ifdef ENABLE_BLE
+ #include "ble/le_device_db_tlv.h"
++#endif
+ #include "bluetooth_company_id.h"
+ #include "btstack_audio.h"
+ #include "btstack_chipset_realtek.h"
+@@ -113,7 +115,9 @@
+             // setup Zephyr chipset support
+             hci_set_chipset(btstack_chipset_zephyr_instance());
+             // sm required to setup static random Bluetooth address
++#ifdef ENABLE_BLE
+             sm_init();
++#endif
+             break;
+         default:
+             break;
+@@ -340,23 +344,15 @@
+         hci_transport_usb_set_bus_and_path(usb_bus, usb_path_len, usb_path);
+     }
+ 
+-    // log into file using HCI_DUMP_PACKETLOGGER format
+-    char pklg_path[100];
+-    if (log_file_path == NULL){
+-        btstack_strcpy(pklg_path, sizeof(pklg_path),  "/tmp/hci_dump");
+-        if (usb_path_len){
+-            btstack_strcat(pklg_path, sizeof(pklg_path),  "_");
+-            btstack_strcat(pklg_path, sizeof(pklg_path),  usb_path_string);
+-        }
+-        btstack_strcat(pklg_path, sizeof(pklg_path), ".pklg");
+-        log_file_path = pklg_path;
++    // DS3Bridge: the HCI packet log is only written when requested with -l FILE
++    // (it records all Bluetooth traffic and grows without limit during long sessions).
++    if (log_file_path != NULL){
++        hci_dump_posix_fs_open(log_file_path, HCI_DUMP_PACKETLOGGER);
++        const hci_dump_t * hci_dump_impl = hci_dump_posix_fs_get_instance();
++        hci_dump_init(hci_dump_impl);
++        printf("Packet Log: %s\n", log_file_path);
+     }
+ 
+-    hci_dump_posix_fs_open(log_file_path, HCI_DUMP_PACKETLOGGER);
+-    const hci_dump_t * hci_dump_impl = hci_dump_posix_fs_get_instance();
+-    hci_dump_init(hci_dump_impl);
+-    printf("Packet Log: %s\n", log_file_path);
+-
+     // init HCI
+ 	hci_init(hci_transport_usb_instance(), NULL);
+ 

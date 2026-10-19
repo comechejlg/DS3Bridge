@@ -1,0 +1,10 @@
+# Dependencias descargadas por build.sh y resultados de compilación
+deps/
+build/
+bin/
+*.o
+*.dSYM/
+# Registros
+*.log
+*.pklg
+.DS_Store

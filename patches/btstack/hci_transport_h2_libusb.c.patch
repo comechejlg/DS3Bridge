@@ -1,0 +1,24 @@
+--- hci_transport_h2_libusb.c
++++ hci_transport_h2_libusb.c
+@@ -851,9 +851,9 @@
+     log_info("libusb_detach_kernel_driver");
+ #endif
+ 
+-    const int configuration = 1;
+-    log_info("setting configuration %d...", configuration);
+-    r = libusb_set_configuration(aHandle, configuration);
++    // DS3Bridge: do not force the USB configuration. Forcing it (plus the USB reset
++    // below) caused a macOS kernel panic with an old Bluetooth dongle behind a USB-C hub.
++    r = 0;
+     if (r < 0) {
+         log_error("Error libusb_set_configuration: %d", r);
+         if (kernel_driver_detached){
+@@ -920,7 +920,7 @@
+     log_info("libusb open %d, handle %p", r, dev_handle);
+ 
+     // reset device (Not currently possible under FreeBSD 11.x/12.x due to usb framework)
+-#if !defined(__FreeBSD__)
++#if 0   // DS3Bridge: no USB reset of the dongle (see above)
+     r = libusb_reset_device(dev_handle);
+     if (r < 0) {
+         log_error("libusb_reset_device failed!");

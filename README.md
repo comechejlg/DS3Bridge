@@ -1,0 +1,119 @@
+# DS3Bridge — PS3 DualShock 3 over Bluetooth on modern macOS
+
+**Use a PlayStation 3 DualShock 3 controller wirelessly on macOS 12+ (tested on macOS 26 Tahoe, Apple Silicon).**
+
+[Leer en español](README.es.md)
+
+Since macOS Monterey, a DualShock 3 only works **by cable** (with an activation tool such as `ds3activate`). Over Bluetooth macOS shows an endless "enter a code" pairing window and drops the connection after ~30 s. DS3Bridge works around this **without disabling SIP, without kernel extensions and without Apple-only entitlements**, using:
+
+- a **cheap USB Bluetooth adapter** that macOS ignores and that DS3Bridge drives directly with its own Bluetooth stack ([BTstack](https://github.com/bluekitchen/btstack)). The built-in Mac Bluetooth keeps working normally for your other devices;
+- a **DSU (cemuhook) server** so emulators like Dolphin can read the controller (buttons, sticks, pressure, basic motion);
+- a **keyboard mode** that turns the controller into key presses, either through the signed [Karabiner virtual HID keyboard](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice) (needed for OpenEmu) or through synthetic key events.
+
+> ⚠️ **Status: experimental, personal project.** It works on the author's setup (see *Tested hardware*). Read the [warnings](#warnings) before using it.
+
+## How it works (short version)
+
+```
+DualShock 3 ──Bluetooth──▶ USB BT adapter ──libusb──▶ ds3host (BTstack, no pairing required)
+                                                         ├─▶ DSU server 127.0.0.1:26760 ──▶ Dolphin, Cemu…
+                                                         └─▶ keyboard mode ──▶ vhidkbd (root) ──▶ Karabiner virtual HID keyboard ──▶ OpenEmu, any app
+```
+
+The DS3 never does real Bluetooth pairing (no link key). macOS 12+ requires authenticated pairing for every Bluetooth HID device, so it rejects the DS3 — and apps cannot bypass that policy because `bluetoothd` owns the HID channels. With a second adapter controlled by our own stack, *we* decide the security policy, just like the PS3 did. Full story in [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md).
+
+## Requirements
+
+- A Mac with macOS 13 or newer (developed on macOS 26, Apple Silicon).
+- A **USB Bluetooth adapter** (any classic Bluetooth 2.1+ "HCI" dongle; tested with an old ISSC `0x1131:0x1004`). On Apple Silicon macOS does not use external adapters, so it stays free for DS3Bridge. A USB-A → USB-C adapter if needed.
+- A DualShock 3 (or Sixaxis) and its USB cable (only for the one-time pairing).
+- Xcode Command Line Tools (`xcode-select --install`) and [Homebrew](https://brew.sh) with `libusb` and `pkg-config`.
+
+## Step by step
+
+### 1. Build
+
+```sh
+brew install libusb pkg-config
+git clone https://github.com/<your-user>/DS3Bridge.git
+cd DS3Bridge
+./build.sh
+```
+
+`build.sh` downloads BTstack and the Karabiner client headers at **pinned, tested commits**, applies the small patches in `patches/`, and puts three programs in `bin/`:
+
+| Program | What it does |
+|---|---|
+| `ds3host` | Drives the USB Bluetooth adapter, accepts the DS3, reads its reports, serves DSU and keyboard mode. Runs as your user. |
+| `vhidkbd` | Tiny root service that forwards keys to the Karabiner virtual HID keyboard. |
+| `ds3bt` | One-time pairing over USB: writes the adapter's Bluetooth address into the controller. |
+
+### 2. First run (learn the adapter address)
+
+Plug in the USB Bluetooth adapter and double-click **`scripts/Start DS3Bridge.command`**. You should see `Adaptador listo. Dirección Bluetooth del adaptador: …` ("adapter ready"). The address is saved to `~/Library/Application Support/DS3Bridge/adapter-address`. Close the window.
+
+### 3. Pair the controller (once)
+
+Connect the DS3 with its USB cable and double-click **`scripts/Pair controller (USB cable).command`**. It must end with `OK: el mando apunta ya a este Mac.` ("the controller now points to this Mac"). Unplug the cable.
+
+You only repeat this if you use the controller with a PS3 or another device.
+
+### 4. Try it
+
+Open **`scripts/Start DS3Bridge.command`** again and press **PS**. The controller rumbles briefly and LED 1 stays on. Moving sticks and pressing buttons shows the live state in the terminal.
+
+### 5. Use it in games
+
+**Emulators with DSU support (Dolphin, Cemu, …)** — nothing else to install.
+In Dolphin: *Controllers → Alternate Input Sources → DSU Client*, enable it and add server `127.0.0.1`, port `26760`. Then choose the device starting with `DSUClient/0/` in the controller configuration.
+
+**OpenEmu (and any app that reads the keyboard)** — keyboard mode. OpenEmu only accepts *real HID keyboards* during gameplay, so you need the Karabiner virtual keyboard:
+
+1. Double-click **`scripts/Install Karabiner driver.command`**. It downloads the official signed and notarized package, verifies the signature (Developer ID *Fumihiko Takayama*, team `G43BCU2T37`) and opens the installer.
+2. Approve the driver in *System Settings → General → Login Items & Extensions → Driver Extensions (ⓘ)* → enable **Karabiner-VirtualHIDDevice**.
+3. Double-click **`scripts/Install service.command`** (asks for your password once). It installs the Karabiner daemon and `vhidkbd` as system services and creates **DS3Bridge.app** in Applications.
+4. From now on just open **DS3Bridge** from Applications and press PS. No password.
+5. In OpenEmu: *Preferences → Controls*, choose the system, click each button and press it on the controller.
+
+Without the service, keyboard mode falls back to synthetic key events (needs Accessibility permission for Terminal): fine for most apps, **not** for OpenEmu gameplay.
+
+### Keyboard mapping
+
+| Controller | Key | | Controller | Key |
+|---|---|---|---|---|
+| D-pad | Arrow keys | | L1 / R1 | Q / E |
+| Left stick | W A S D | | L2 / R2 | 1 / 3 |
+| Right stick | I J K L | | L3 / R3 | F / H |
+| Cross / Circle | X / C | | Start | Return |
+| Square / Triangle | Z / V | | Select | N |
+
+**PS button** pauses/resumes keyboard mode (LED 1 = active, LED 4 = paused) so the controller does not type into other apps. Sticks are digital in keyboard mode (pressed or not).
+
+## Warnings
+
+- **Stop DS3Bridge before unplugging the USB adapter.** During development, an unpatched BTstack USB reset + configuration change caused a **macOS kernel panic** (reboot) with an old adapter behind a USB-C hub. The shipped patches remove those operations and the problem has not reappeared, but this path is not exhaustively tested.
+- The pressure-sensitive buttons are read from their analog value with a threshold, because some controllers report the digital bits as "pressed" at rest.
+- Motion data sent over DSU is approximate (the DS3 has a 3-axis accelerometer and a single gyro axis).
+- On-screen messages of the programs are currently in Spanish.
+
+## Tested hardware
+
+- MacBook Air M1, macOS 26.7.1 (Tahoe)
+- USB Bluetooth adapter ISSC "EDRBTA" `0x1131:0x1004` (Bluetooth 2.1 + EDR) behind a USB-C hub
+- DualShock 3, OpenEmu-Silicon v23 (DeSmuME core)
+
+Reports with other adapters/controllers are welcome — please open an issue.
+
+## Uninstall
+
+`scripts/Uninstall service.command` removes the services and the app. To remove the Karabiner driver: `/Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager deactivate`.
+
+## Troubleshooting
+
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
+## Credits & licenses
+
+DS3Bridge's own code is MIT-licensed (see [LICENSE](LICENSE)). It builds on third-party work with **different licenses** — notably **BTstack, which is free for non-commercial use only**. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Thanks to vit9696 (`ds3activate`), BlueKitchen (BTstack), Fumihiko Takayama / pqrs.org (Karabiner VirtualHIDDevice), the Linux `hid-sony` driver authors and the cemuhook/DSU protocol documenters.
