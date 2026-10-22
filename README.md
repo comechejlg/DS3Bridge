@@ -1,6 +1,6 @@
 # DS3Bridge — PS3 DualShock 3 over Bluetooth on modern macOS
 
-**Use a PlayStation 3 DualShock 3 controller wirelessly on macOS 12+ (tested on macOS 26 Tahoe, Apple Silicon).**
+**Use a PlayStation 3 DualShock 3 controller wirelessly on modern macOS (macOS 13+; tested on macOS 26 Tahoe, Apple Silicon).**
 
 [Leer en español](README.es.md)
 
@@ -14,10 +14,15 @@ Since macOS Monterey, a DualShock 3 only works **by cable** (with an activation 
 
 ## How it works (short version)
 
-```
-DualShock 3 ──Bluetooth──▶ USB BT adapter ──libusb──▶ ds3host (BTstack, no pairing required)
-                                                         ├─▶ DSU server 127.0.0.1:26760 ──▶ Dolphin, Cemu…
-                                                         └─▶ keyboard mode ──▶ vhidkbd (root) ──▶ Karabiner virtual HID keyboard ──▶ OpenEmu, any app
+```mermaid
+flowchart LR
+    DS3["🎮 DualShock 3"] -- Bluetooth --> ADP["USB Bluetooth adapter<br/>(ignored by macOS)"]
+    ADP -- libusb --> HOST["ds3host<br/>own BTstack host<br/>no pairing required"]
+    HOST -- "DSU · UDP 127.0.0.1:26760" --> EMU["Dolphin and other<br/>DSU emulators"]
+    HOST -- "keys · Unix socket" --> VHID["vhidkbd (root)"]
+    VHID --> KB["Karabiner virtual<br/>HID keyboard"]
+    KB --> APPS["OpenEmu,<br/>any app"]
+    MAC["Mac built-in Bluetooth<br/>keeps working: AirPods, mouse…"]
 ```
 
 The DS3 never does real Bluetooth pairing (no link key). macOS 12+ requires authenticated pairing for every Bluetooth HID device, so it rejects the DS3 — and apps cannot bypass that policy because `bluetoothd` owns the HID channels. With a second adapter controlled by our own stack, *we* decide the security policy, just like the PS3 did. Full story in [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md).
@@ -25,7 +30,7 @@ The DS3 never does real Bluetooth pairing (no link key). macOS 12+ requires auth
 ## Requirements
 
 - A Mac with macOS 13 or newer (developed on macOS 26, Apple Silicon).
-- A **USB Bluetooth adapter** (any classic Bluetooth 2.1+ "HCI" dongle; tested with an old ISSC `0x1131:0x1004`). On Apple Silicon macOS does not use external adapters, so it stays free for DS3Bridge. A USB-A → USB-C adapter if needed.
+- A **USB Bluetooth adapter**. Only an old ISSC `0x1131:0x1004` (Bluetooth 2.1) has been tested; other standard USB Bluetooth dongles *should* work, but that is unconfirmed — please report yours. On Apple Silicon, macOS does not use external adapters, so it stays free for DS3Bridge. A USB-A → USB-C adapter if needed.
 - A DualShock 3 (or Sixaxis) and its USB cable (only for the one-time pairing).
 - Xcode Command Line Tools (`xcode-select --install`) and [Homebrew](https://brew.sh) with `libusb` and `pkg-config`.
 
@@ -35,7 +40,7 @@ The DS3 never does real Bluetooth pairing (no link key). macOS 12+ requires auth
 
 ```sh
 brew install libusb pkg-config
-git clone https://github.com/<your-user>/DS3Bridge.git
+git clone https://github.com/comechejlg/DS3Bridge.git
 cd DS3Bridge
 ./build.sh
 ```
@@ -52,6 +57,8 @@ cd DS3Bridge
 
 Plug in the USB Bluetooth adapter and double-click **`scripts/Start DS3Bridge.command`**. You should see `Adaptador listo. Dirección Bluetooth del adaptador: …` ("adapter ready"). The address is saved to `~/Library/Application Support/DS3Bridge/adapter-address`. Close the window.
 
+macOS may ask to give Terminal **Accessibility** permission; this is only needed for the synthetic-key fallback (see step 5) and you can skip it if you will install the Karabiner service.
+
 ### 3. Pair the controller (once)
 
 Connect the DS3 with its USB cable and double-click **`scripts/Pair controller (USB cable).command`**. It must end with `OK: el mando apunta ya a este Mac.` ("the controller now points to this Mac"). Unplug the cable.
@@ -64,7 +71,7 @@ Open **`scripts/Start DS3Bridge.command`** again and press **PS**. The controlle
 
 ### 5. Use it in games
 
-**Emulators with DSU support (Dolphin, Cemu, …)** — nothing else to install.
+**Emulators with DSU support (Dolphin, Cemu, …)** — nothing else to install. *The DSU server has been verified with a protocol test client, but not yet confirmed inside Dolphin: feedback welcome.*
 In Dolphin: *Controllers → Alternate Input Sources → DSU Client*, enable it and add server `127.0.0.1`, port `26760`. Then choose the device starting with `DSUClient/0/` in the controller configuration.
 
 **OpenEmu (and any app that reads the keyboard)** — keyboard mode. OpenEmu only accepts *real HID keyboards* during gameplay, so you need the Karabiner virtual keyboard:
@@ -72,7 +79,7 @@ In Dolphin: *Controllers → Alternate Input Sources → DSU Client*, enable it 
 1. Double-click **`scripts/Install Karabiner driver.command`**. It downloads the official signed and notarized package, verifies the signature (Developer ID *Fumihiko Takayama*, team `G43BCU2T37`) and opens the installer.
 2. Approve the driver in *System Settings → General → Login Items & Extensions → Driver Extensions (ⓘ)* → enable **Karabiner-VirtualHIDDevice**.
 3. Double-click **`scripts/Install service.command`** (asks for your password once). It installs the Karabiner daemon and `vhidkbd` as system services and creates **DS3Bridge.app** in Applications.
-4. From now on just open **DS3Bridge** from Applications and press PS. No password.
+4. From now on just open **DS3Bridge** from Applications and press PS. No password. (The app points to this folder: if you move the repository, run `Install service` again.)
 5. In OpenEmu: *Preferences → Controls*, choose the system, click each button and press it on the controller.
 
 Without the service, keyboard mode falls back to synthetic key events (needs Accessibility permission for Terminal): fine for most apps, **not** for OpenEmu gameplay.
@@ -100,7 +107,8 @@ Without the service, keyboard mode falls back to synthetic key events (needs Acc
 
 - MacBook Air M1, macOS 26.7.1 (Tahoe)
 - USB Bluetooth adapter ISSC "EDRBTA" `0x1131:0x1004` (Bluetooth 2.1 + EDR) behind a USB-C hub
-- DualShock 3, OpenEmu-Silicon v23 (DeSmuME core)
+- DualShock 3, OpenEmu-Silicon v23 (DeSmuME core) — keyboard mode confirmed in-game
+- DSU server: tested with a protocol client only
 
 Reports with other adapters/controllers are welcome — please open an issue.
 
