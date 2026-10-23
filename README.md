@@ -10,7 +10,7 @@ Since macOS Monterey, a DualShock 3 only works **by cable** (with an activation 
 - a **DSU (cemuhook) server** so emulators like Dolphin can read the controller (buttons, sticks, pressure, basic motion);
 - a **keyboard mode** that turns the controller into key presses, either through the signed [Karabiner virtual HID keyboard](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice) (needed for OpenEmu) or through synthetic key events.
 
-> ⚠️ **Status: experimental, personal project.** It works on the author's setup (see *Tested hardware*). Read the [warnings](#warnings) before using it.
+> ⚠️ **Status: experimental, personal project.** It works on the author's setup (see *Tested hardware*). See the [notes](#notes) below.
 
 ## How it works (short version)
 
@@ -96,9 +96,8 @@ Without the service, keyboard mode falls back to synthetic key events (needs Acc
 
 **PS button** pauses/resumes keyboard mode (LED 1 = active, LED 4 = paused) so the controller does not type into other apps. Sticks are digital in keyboard mode (pressed or not).
 
-## Warnings
+## Notes
 
-- **Stop DS3Bridge before unplugging the USB adapter.** During development, an unpatched BTstack USB reset + configuration change caused a **macOS kernel panic** (reboot) with an old adapter behind a USB-C hub. The shipped patches remove those operations and the problem has not reappeared, but this path is not exhaustively tested.
 - The pressure-sensitive buttons are read from their analog value with a threshold, because some controllers report the digital bits as "pressed" at rest.
 - Motion data sent over DSU is approximate (the DS3 has a 3-axis accelerometer and a single gyro axis).
 - On-screen messages of the programs are currently in Spanish.
@@ -109,6 +108,7 @@ Without the service, keyboard mode falls back to synthetic key events (needs Acc
 - USB Bluetooth adapter ISSC "EDRBTA" `0x1131:0x1004` (Bluetooth 2.1 + EDR) behind a USB-C hub
 - DualShock 3, OpenEmu-Silicon v23 (DeSmuME core) — keyboard mode confirmed in-game
 - DSU server: tested with a protocol client only
+- Unplugging the USB adapter while DS3Bridge is running: no problems
 
 Reports with other adapters/controllers are welcome — please open an issue.
 

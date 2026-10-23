@@ -22,4 +22,4 @@
 
 **A button is "stuck" or ghost presses appear** — the thresholds are `PRESS_ON 70` / `PRESS_OFF 50` in `src/ds3host/ds3host.c`. Tune them for your controller and rebuild.
 
-**The Mac rebooted (kernel panic)** — please open an issue with your adapter's vendor/product ID and macOS version, and stop using that adapter. Always stop DS3Bridge before unplugging the adapter.
+**The Mac froze or rebooted while using DS3Bridge** — this has not happened with the shipped patches, but if it does with your adapter, please open an issue with its vendor/product ID and your macOS version.

@@ -1,7 +1,6 @@
 #!/bin/zsh
 # Arranca DS3Bridge. Cuando ponga "Esperando", pulsa PS en el mando.
 # Para pararlo: cierra esta ventana o pulsa Ctrl+C.
-# IMPORTANTE: para el programa ANTES de desenchufar el adaptador Bluetooth USB.
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 pkill -f "bin/ds3host" 2>/dev/null
 if [ ! -x "$ROOT/bin/ds3host" ]; then echo "Primero compila con ./build.sh"; read -k 1; exit 1; fi

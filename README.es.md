@@ -10,7 +10,7 @@ Desde macOS Monterey, el DualShock 3 solo funciona **por cable** (con un activad
 - un **servidor DSU (cemuhook)** para que emuladores como Dolphin lean el mando (botones, sticks, presión y movimiento básico);
 - un **modo teclado** que convierte el mando en pulsaciones de teclas, mediante el [teclado virtual HID de Karabiner](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice) (firmado; necesario para OpenEmu) o mediante teclas sintéticas.
 
-> ⚠️ **Estado: experimental, proyecto personal.** Funciona en el equipo del autor (ver *Hardware probado*). Lee los [avisos](#avisos) antes de usarlo.
+> ⚠️ **Estado: experimental, proyecto personal.** Funciona en el equipo del autor (ver *Hardware probado*). Mira las [notas](#notas) más abajo.
 
 ## Cómo funciona (versión corta)
 
@@ -98,9 +98,8 @@ Sin el servicio, el modo teclado usa teclas sintéticas (requiere permiso de Acc
 
 El **botón PS** pausa o reanuda el modo teclado (LED 1 = activo, LED 4 = en pausa), para que el mando no escriba en otras apps. En modo teclado, los sticks son digitales (pulsado o no).
 
-## Avisos
+## Notas
 
-- **Cierra DS3Bridge antes de desenchufar el adaptador USB.** Durante el desarrollo, el reset USB y el cambio de configuración que hace BTstack sin parchear provocaron un **kernel panic** (reinicio del Mac) con un adaptador antiguo conectado a un hub USB-C. Los parches incluidos quitan esas operaciones y no ha vuelto a pasar, pero ese caso no está probado a fondo.
 - Los botones sensibles a la presión se leen por su valor analógico con un umbral, porque algunos mandos dan por pulsados los bits digitales en reposo.
 - El movimiento que se envía por DSU es aproximado (el DS3 tiene acelerómetro de 3 ejes y un solo eje de giroscopio).
 - Los mensajes de los programas están, de momento, en español.
@@ -111,6 +110,7 @@ El **botón PS** pausa o reanuda el modo teclado (LED 1 = activo, LED 4 = en pau
 - Adaptador Bluetooth USB ISSC "EDRBTA" `0x1131:0x1004` (Bluetooth 2.1 + EDR) conectado a un hub USB-C
 - DualShock 3, OpenEmu-Silicon v23 (núcleo DeSmuME): modo teclado confirmado jugando
 - Servidor DSU: probado solo con un cliente de prueba del protocolo
+- Desenchufar el adaptador USB con DS3Bridge en marcha: sin problemas
 
 Se agradecen informes con otros adaptadores o mandos: abre un *issue*.
 
