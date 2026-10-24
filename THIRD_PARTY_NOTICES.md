@@ -2,12 +2,28 @@
 
 DS3Bridge does **not** bundle third-party source code in this repository. `build.sh` downloads the following projects at pinned commits. Their licenses apply to them and to anything built from them.
 
+The prebuilt zip in Releases (`./build.sh --release`) includes the full license texts in its `licenses/` folder.
+
 ## BTstack — BlueKitchen GmbH
 
 - https://github.com/bluekitchen/btstack (commit `e38553977a25fb0b55b383c72c289be0975f422c`)
 - License: https://github.com/bluekitchen/btstack/blob/master/LICENSE. It is a BSD-style license **restricted to non-commercial use**. Commercial use requires a license from BlueKitchen (https://bluekitchen-gmbh.com).
 - `patches/btstack/*.patch` are modifications of BTstack files (`port/libusb/main.c`, `platform/libusb/hci_transport_h2_libusb.c`) and are distributed under BTstack's license. `src/ds3host/btstack_config.h` is derived from BTstack's `port/libusb/btstack_config.h`.
 - **Consequence:** the `ds3host` binary links BTstack, so it may only be used and distributed for non-commercial purposes.
+
+## libusb
+
+- https://libusb.info — GNU Lesser General Public License v2.1.
+- Source builds link the Homebrew libusb dynamically. The prebuilt release links libusb 1.0 **statically** into `ds3host`. As the LGPL requires, you can relink `ds3host` against another libusb: the complete DS3Bridge source and build script are in this repository (`./build.sh`, or `./build.sh --release` for a static build). libusb's source is available at https://github.com/libusb/libusb.
+
+## Header-only libraries compiled into `vhidkbd`
+
+`vhidkbd` uses the Karabiner client headers and the header-only libraries vendored with them:
+
+- pqrs libraries (Takayama Fumihiko) and asio (Christopher M. Kohlhoff): Boost Software License 1.0 (`licenses/Boost-1.0.txt`)
+- Microsoft GSL: MIT (`licenses/Microsoft-GSL-MIT.txt`)
+- type_safe (Jonathan Müller): MIT (`licenses/type_safe-MIT.txt`)
+- nod (Fredrik Berggren): MIT (`licenses/nod-MIT.txt`)
 
 ## Karabiner-DriverKit-VirtualHIDDevice — Fumihiko Takayama / pqrs.org
 

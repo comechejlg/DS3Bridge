@@ -32,7 +32,7 @@ El DS3 nunca hace un emparejamiento Bluetooth real (no tiene clave de enlace). m
 - Un Mac con macOS 13 o posterior (desarrollado en macOS 26, Apple Silicon).
 - Un **adaptador Bluetooth USB**. Solo se ha probado uno antiguo ISSC `0x1131:0x1004` (Bluetooth 2.1); otros adaptadores USB estándar *deberían* funcionar, pero no está confirmado: si pruebas el tuyo, cuéntalo. En Apple Silicon macOS no usa adaptadores externos, así que queda libre para DS3Bridge. Un hub USB-C o un adaptador USB-C a USB-A si tu Mac solo tiene USB-C.
 - Un DualShock 3 (o Sixaxis) y un cable **Mini-USB** (solo para emparejarlo una vez).
-- Las Command Line Tools de Xcode (`xcode-select --install`) y [Homebrew](https://brew.sh) con `libusb` y `pkg-config`.
+- Solo para compilarlo tú: las Command Line Tools de Xcode (`xcode-select --install`) y [Homebrew](https://brew.sh) con `libusb` y `pkg-config`.
 
 ### El hardware
 
@@ -47,9 +47,17 @@ El DS3 nunca hace un emparejamiento Bluetooth real (no tiene clave de enlace). m
 
 ## Paso a paso
 
-### 1. Compilar
+### 1. Conseguir DS3Bridge
 
-En Terminal:
+**Opción A: descargarlo listo para usar (Apple Silicon).** Descarga [`DS3Bridge-macOS-arm64.zip`](https://github.com/comechejlg/DS3Bridge/releases/latest/download/DS3Bridge-macOS-arm64.zip) desde [Releases](https://github.com/comechejlg/DS3Bridge/releases), descomprímelo y mueve la carpeta `DS3Bridge` al sitio donde se vaya a quedar (por ejemplo, tu carpeta de usuario). No hace falta Homebrew ni Xcode.
+
+Los programas no están firmados con un certificado de desarrollador de Apple, así que macOS bloquea los archivos descargados de internet ("Apple no ha podido verificar…"). Quita ese bloqueo una vez, en Terminal:
+
+```sh
+xattr -dr com.apple.quarantine ~/DS3Bridge
+```
+
+**Opción B: compilarlo tú (Homebrew).** En Terminal:
 
 ```sh
 brew install libusb pkg-config
@@ -58,7 +66,9 @@ cd DS3Bridge
 ./build.sh
 ```
 
-`build.sh` descarga BTstack y las cabeceras del cliente de Karabiner en **versiones fijas y probadas**, aplica los pequeños parches de `patches/` y deja tres programas en `bin/`:
+`build.sh` descarga BTstack y las cabeceras del cliente de Karabiner en **versiones fijas y probadas** y aplica los pequeños parches de `patches/`. `./build.sh --release` genera el mismo zip que se publica en Releases (con libusb incluida).
+
+De las dos formas tendrás tres programas en `bin/`:
 
 | Programa | Qué hace |
 |---|---|
@@ -89,7 +99,7 @@ En Dolphin: *Controladores → Fuentes de entrada alternativas → Cliente DSU*,
 
 **OpenEmu (y cualquier app que lea el teclado)**: modo teclado. OpenEmu, durante la partida, solo acepta *teclados HID reales*, así que hace falta el teclado virtual de Karabiner:
 
-1. Doble clic en **`scripts/Install Karabiner driver.command`**. Descarga el paquete oficial (firmado y notarizado), comprueba la firma (Developer ID *Fumihiko Takayama*, equipo `G43BCU2T37`) y abre el instalador.
+1. Doble clic en **`scripts/Install Karabiner driver.command`**. Descarga el paquete oficial (firmado y notarizado), comprueba la firma (Developer ID *Fumihiko Takayama*, equipo `G43BCU2T37`) y abre el instalador. (Descarga manual desde la página oficial: [Karabiner-DriverKit-VirtualHIDDevice-8.2.0.pkg](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/releases/download/v8.2.0/Karabiner-DriverKit-VirtualHIDDevice-8.2.0.pkg).)
 2. Aprueba el driver en *Ajustes del Sistema → General → Ítems de inicio y extensiones → Extensiones de controlador (ⓘ)* y activa **Karabiner-VirtualHIDDevice**.
 3. Doble clic en **`scripts/Install service.command`** (pide tu contraseña una sola vez). Instala el daemon de Karabiner y `vhidkbd` como servicios del sistema y crea **DS3Bridge.app** en Aplicaciones.
 4. A partir de ahí, abre **DS3Bridge** desde Aplicaciones y pulsa PS. Sin contraseña. (La app apunta a esta carpeta: si mueves el repositorio, vuelve a ejecutar `Install service`.)

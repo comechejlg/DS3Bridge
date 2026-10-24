@@ -32,7 +32,7 @@ The DS3 never does real Bluetooth pairing (no link key). macOS 12+ requires auth
 - A Mac with macOS 13 or newer (developed on macOS 26, Apple Silicon).
 - A **USB Bluetooth adapter**. Only an old ISSC `0x1131:0x1004` (Bluetooth 2.1) has been tested; other standard USB Bluetooth dongles *should* work, but that is unconfirmed — please report yours. On Apple Silicon, macOS does not use external adapters, so it stays free for DS3Bridge. A USB-C hub or USB-C → USB-A adapter if your Mac only has USB-C.
 - A DualShock 3 (or Sixaxis) and a **Mini-USB** cable (only for the one-time pairing).
-- Xcode Command Line Tools (`xcode-select --install`) and [Homebrew](https://brew.sh) with `libusb` and `pkg-config`.
+- Only to build from source: Xcode Command Line Tools (`xcode-select --install`) and [Homebrew](https://brew.sh) with `libusb` and `pkg-config`.
 
 ### The hardware
 
@@ -47,7 +47,17 @@ The DS3 never does real Bluetooth pairing (no link key). macOS 12+ requires auth
 
 ## Step by step
 
-### 1. Build
+### 1. Get DS3Bridge
+
+**Option A — download it ready to use (Apple Silicon).** Download [`DS3Bridge-macOS-arm64.zip`](https://github.com/comechejlg/DS3Bridge/releases/latest/download/DS3Bridge-macOS-arm64.zip) from [Releases](https://github.com/comechejlg/DS3Bridge/releases), unzip it and move the `DS3Bridge` folder to where it will stay (for example your home folder). Homebrew and Xcode are not needed.
+
+The programs are not signed with an Apple Developer certificate, so macOS blocks files downloaded from the internet ("Apple could not verify…"). Remove that block once, in Terminal:
+
+```sh
+xattr -dr com.apple.quarantine ~/DS3Bridge
+```
+
+**Option B — build from source (Homebrew).**
 
 ```sh
 brew install libusb pkg-config
@@ -56,7 +66,9 @@ cd DS3Bridge
 ./build.sh
 ```
 
-`build.sh` downloads BTstack and the Karabiner client headers at **pinned, tested commits**, applies the small patches in `patches/`, and puts three programs in `bin/`:
+`build.sh` downloads BTstack and the Karabiner client headers at **pinned, tested commits** and applies the small patches in `patches/`. `./build.sh --release` builds the same zip that is published in Releases (libusb built in).
+
+Either way, you get three programs in `bin/`:
 
 | Program | What it does |
 |---|---|
@@ -87,7 +99,7 @@ In Dolphin: *Controllers → Alternate Input Sources → DSU Client*, enable it 
 
 **OpenEmu (and any app that reads the keyboard)** — keyboard mode. OpenEmu only accepts *real HID keyboards* during gameplay, so you need the Karabiner virtual keyboard:
 
-1. Double-click **`scripts/Install Karabiner driver.command`**. It downloads the official signed and notarized package, verifies the signature (Developer ID *Fumihiko Takayama*, team `G43BCU2T37`) and opens the installer.
+1. Double-click **`scripts/Install Karabiner driver.command`**. It downloads the official signed and notarized package, verifies the signature (Developer ID *Fumihiko Takayama*, team `G43BCU2T37`) and opens the installer. (Manual download from the official page: [Karabiner-DriverKit-VirtualHIDDevice-8.2.0.pkg](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/releases/download/v8.2.0/Karabiner-DriverKit-VirtualHIDDevice-8.2.0.pkg).)
 2. Approve the driver in *System Settings → General → Login Items & Extensions → Driver Extensions (ⓘ)* → enable **Karabiner-VirtualHIDDevice**.
 3. Double-click **`scripts/Install service.command`** (asks for your password once). It installs the Karabiner daemon and `vhidkbd` as system services and creates **DS3Bridge.app** in Applications.
 4. From now on just open **DS3Bridge** from Applications and press PS. No password. (The app points to this folder: if you move the repository, run `Install service` again.)

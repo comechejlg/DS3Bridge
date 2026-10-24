@@ -427,6 +427,11 @@ int main(int argc, char **argv) {
       return cmd_pair(mac);
     }
 
+    if (strcmp(cmd, "listen") != 0 && strcmp(cmd, "connect") != 0) {
+      printf("Usage: %s <pair [MAC] | listen [MAC] | connect MAC>\n", argv[0]);
+      return 1;
+    }
+
     IOBluetoothHostController *hc = [IOBluetoothHostController defaultController];
     if (hc.powerState != kBluetoothHCIPowerStateON) {
       printf("The Mac's Bluetooth is off. Turn it on and try again.\n");

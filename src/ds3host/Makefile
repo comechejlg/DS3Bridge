@@ -9,6 +9,14 @@ CFLAGS += -I${BTSTACK_ROOT}/port/libusb -Wno-unused-parameter -Wno-unused-variab
 # No BLE: leave out the LE device database and the LE Security Manager.
 COMMON := $(filter-out le_device_db_tlv.c sm.c,$(COMMON))
 
+# STATIC_LIBUSB=1 (used by ./build.sh --release): link libusb statically, so the
+# binary does not need Homebrew on the machine that runs it.
+ifeq ($(STATIC_LIBUSB),1)
+LDFLAGS := $(filter-out -L% -lusb-1.0,$(LDFLAGS)) \
+  $(shell pkg-config libusb-1.0 --variable=libdir)/libusb-1.0.a \
+  -lobjc -framework IOKit -framework CoreFoundation -framework Security
+endif
+
 .DEFAULT_GOAL := ds3host
 
 ds3host: ${CORE_OBJ} ${COMMON_OBJ} ${CLASSIC_OBJ} ds3host.o stubs.o kbd.o
