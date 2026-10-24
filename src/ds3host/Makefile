@@ -1,12 +1,12 @@
-# Compila ds3host con BTstack (puerto libusb).
-# No lo uses directamente: ejecuta ./build.sh en la raíz del repositorio, que
-# descarga BTstack, aplica los parches y compila en build/ds3host.
+# Builds ds3host with BTstack (libusb port).
+# Do not use it directly: run ./build.sh at the repository root, which
+# downloads BTstack, applies the patches and builds in build/ds3host.
 BTSTACK_ROOT ?= ../../deps/btstack
 include ${BTSTACK_ROOT}/port/libusb/Makefile
 
 VPATH  += ${BTSTACK_ROOT}/port/libusb
 CFLAGS += -I${BTSTACK_ROOT}/port/libusb -Wno-unused-parameter -Wno-unused-variable
-# Sin BLE: fuera la base de datos LE y el Security Manager LE.
+# No BLE: leave out the LE device database and the LE Security Manager.
 COMMON := $(filter-out le_device_db_tlv.c sm.c,$(COMMON))
 
 .DEFAULT_GOAL := ds3host
@@ -14,7 +14,7 @@ COMMON := $(filter-out le_device_db_tlv.c sm.c,$(COMMON))
 ds3host: ${CORE_OBJ} ${COMMON_OBJ} ${CLASSIC_OBJ} ds3host.o stubs.o kbd.o
 	${CC} $^ ${CFLAGS} ${LDFLAGS} -framework ApplicationServices -o $@
 
-# El Makefile de BTstack define "clean_src" como "rm -rf *" en el directorio
-# actual. Lo neutralizamos para no borrar nada por accidente.
+# BTstack's Makefile defines "clean_src" as "rm -rf *" in the current
+# directory. Override it so nothing gets deleted by accident.
 clean_src:
-	@echo "clean_src desactivado en DS3Bridge; usa ./build.sh --clean"
+	@echo "clean_src is disabled in DS3Bridge; use ./build.sh --clean"

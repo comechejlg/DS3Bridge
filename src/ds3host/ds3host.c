@@ -1,11 +1,11 @@
 //
-// ds3host.c — Host Bluetooth propio para el DualShock 3 sobre un adaptador USB.
+// ds3host.c — Own Bluetooth host for the DualShock 3 on a USB adapter.
 //
-// Usa BTstack (libusb) para controlar un adaptador Bluetooth USB que macOS no
-// usa. Al ser nuestra propia pila, aceptamos los canales HID del DS3 sin exigir
-// emparejamiento (el DS3 no sabe hacerlo), igual que hacía la PS3.
+// Uses BTstack (libusb) to drive a USB Bluetooth adapter that macOS leaves
+// unused. Since it is our own stack, we accept the DS3's HID channels without
+// requiring pairing (the DS3 cannot pair), just like the PS3 did.
 //
-// BTstack: (c) BlueKitchen GmbH — gratuito para uso personal/no comercial.
+// BTstack: (c) BlueKitchen GmbH — free for personal/non-commercial use.
 //
 
 #define BTSTACK_FILE__ "ds3host.c"
@@ -31,7 +31,7 @@ typedef struct {
   bool             ctrl_open, intr_open;
   bool             need_enable, need_output;
   bool             rumble_on;
-  uint8_t          stage;         // 1 = falta el saludo con vibración, 2 = falta apagarla
+  uint8_t          stage;         // 1 = greeting rumble pending, 2 = rumble stop pending
   uint32_t         reports;
   uint8_t          slot;          // 0..3 -> LED 1..4
 } ds3_t;
@@ -74,7 +74,7 @@ static ds3_t *pad_new(hci_con_handle_t h, bd_addr_t a) {
   return NULL;
 }
 
-// Report de salida 0x01 (36 bytes, igual que hid-sony en Linux).
+// Output report 0x01 (36 bytes, same as hid-sony on Linux).
 static void build_output(ds3_t *p, uint8_t out[36], bool rumble) {
   static const uint8_t base[36] = {
     0x01,
@@ -89,7 +89,7 @@ static void build_output(ds3_t *p, uint8_t out[36], bool rumble) {
   };
   memcpy(out, base, 36);
   if (rumble) { out[2] = 0xFE; out[3] = 0xFF; out[4] = 0xFE; out[5] = 0xFF; }
-  // LED: el del número de mando; si el modo teclado está en pausa, LED 4.
+  // LED: the controller's number; LED 4 while keyboard mode is paused.
   out[10] = kbd_enabled ? (uint8_t)(0x02 << p->slot) : 0x10;
 }
 
@@ -97,8 +97,8 @@ static void request_send(ds3_t *p) {
   if (p->ctrl_open) l2cap_request_can_send_now_event(p->ctrl_cid);
 }
 
-// Secuencia de saludo: 300 ms después de activar -> LED + vibración; 600 ms más -> sin vibración.
-// (Si el report de salida llega pegado a la activación, el mando contesta NOT_READY y lo ignora.)
+// Greeting: 300 ms after enabling -> LED + rumble; 600 ms later -> rumble off.
+// (If the output report arrives right after the enable, the controller answers NOT_READY and ignores it.)
 static void startup_step(btstack_timer_source_t *ts) {
   bool again = false;
   for (int i = 0; i < MAX_PADS; i++) {
@@ -120,11 +120,11 @@ static void start_greeting(void) {
 
 static void ctrl_can_send(ds3_t *p) {
   if (p->need_enable) {
-    // SET_REPORT | Feature 0xF4: modo operativo por Bluetooth.
+    // SET_REPORT | Feature 0xF4: Bluetooth operational mode.
     static const uint8_t enable[] = { 0x53, 0xF4, 0x42, 0x03, 0x00, 0x00 };
     l2cap_send(p->ctrl_cid, (uint8_t *)enable, sizeof enable);
     p->need_enable = false;
-    LOG("-> activación (F4 42 03) enviada");
+    LOG("-> enable (F4 42 03) sent");
     p->stage = 1; start_greeting();
     if (p->need_output) request_send(p);
     return;
@@ -135,16 +135,16 @@ static void ctrl_can_send(ds3_t *p) {
     build_output(p, pkt + 1, rumble);
     l2cap_send(p->ctrl_cid, pkt, sizeof pkt);
     p->need_output = false;
-    LOG("-> LED %u%s", p->slot + 1, rumble ? " + vibración" : "");
+    LOG("-> LED %u%s", p->slot + 1, rumble ? " + rumble" : "");
   }
 }
 
 // ---------------------------------------------------------------------------
-// Estado normalizado del mando
+// Normalized controller state
 // ---------------------------------------------------------------------------
-// Los botones sensibles a la presión (cruceta, L1/L2/R1/R2 y los 4 de la derecha)
-// se deciden por su valor analógico con un umbral: el bit digital de algunos
-// mandos se queda "pulsado" en reposo (sensores con 15-30 de presión residual).
+// Pressure-sensitive buttons (D-pad, L1/L2/R1/R2 and the 4 face buttons) are
+// decided from their analog value with a threshold: on some controllers the
+// digital bit stays "pressed" at rest (sensors with 15-30 residual pressure).
 
 #define PRESS_ON  70
 #define PRESS_OFF 50
@@ -155,7 +155,7 @@ enum { B_SELECT, B_L3, B_R3, B_START, B_UP, B_RIGHT, B_DOWN, B_LEFT,
 typedef struct {
   uint32_t buttons;              // bit = 1 << B_*
   uint8_t  lx, ly, rx, ry;
-  uint8_t  pr[12];               // presiones: up right down left L2 R2 L1 R1 tri circ cross square
+  uint8_t  pr[12];               // pressures: up right down left L2 R2 L1 R1 tri circ cross square
   int16_t  acc[3], gyro;
   uint8_t  battery;
 } pad_state_t;
@@ -170,12 +170,12 @@ static void decode(int slot, const uint8_t *r) {
   if (r[2] & 0x04) b |= 1u << B_R3;
   if (r[2] & 0x08) b |= 1u << B_START;
   if (r[4] & 0x01) b |= 1u << B_PS;
-  // Presiones (offset 14..25) en el mismo orden que los bits B_UP..B_SQUARE.
+  // Pressures (offset 14..25) in the same order as bits B_UP..B_SQUARE.
   for (int k = 0; k < 12; k++) {
     uint8_t v = r[14 + k];
     bool was = (s->buttons >> (B_UP + k)) & 1u;
     if (v >= PRESS_ON || (was && v >= PRESS_OFF)) b |= 1u << (B_UP + k);
-    // Presión "limpia": por debajo del umbral de reposo cuenta como 0.
+    // "Clean" pressure: anything below the rest threshold counts as 0.
     s->pr[k] = v < PRESS_OFF ? 0 : v;
   }
   s->buttons = b;
@@ -188,25 +188,25 @@ static void decode(int slot, const uint8_t *r) {
 }
 
 // ---------------------------------------------------------------------------
-// Modo teclado (OpenEmu y cualquier app que lea el teclado). PS lo activa/desactiva.
+// Keyboard mode (OpenEmu and any app that reads the keyboard). PS toggles it.
 // ---------------------------------------------------------------------------
 
 #include "kbd.h"
 
-// Teclas virtuales de macOS (kVK_*).
+// macOS virtual keys (kVK_*).
 enum { K_A = 0x00, K_S = 0x01, K_D = 0x02, K_F = 0x03, K_H = 0x04, K_Z = 0x06, K_X = 0x07,
        K_C = 0x08, K_V = 0x09, K_Q = 0x0C, K_W = 0x0D, K_E = 0x0E, K_1 = 0x12, K_3 = 0x14,
        K_I = 0x22, K_L = 0x25, K_J = 0x26, K_K = 0x28, K_N = 0x2D, K_M = 0x2E,
        K_RETURN = 0x24, K_LEFT = 0x7B, K_RIGHT = 0x7C, K_DOWN = 0x7D, K_UP = 0x7E };
 
-// Botón -> tecla (orden de B_*; 0xFFFF = sin tecla).
+// Button -> key (B_* order; 0xFFFF = no key).
 static const unsigned short kKeyFor[17] = {
   /* SELECT */ K_N, /* L3 */ K_F, /* R3 */ K_H, /* START */ K_RETURN,
   /* UP */ K_UP, /* RIGHT */ K_RIGHT, /* DOWN */ K_DOWN, /* LEFT */ K_LEFT,
   /* L2 */ K_1, /* R2 */ K_3, /* L1 */ K_Q, /* R1 */ K_E,
   /* TRI */ K_V, /* CIRC */ K_C, /* CROSS */ K_X, /* SQUARE */ K_Z, /* PS */ 0xFFFF
 };
-// Sticks como 4 direcciones digitales: izquierdo = WASD, derecho = IJKL.
+// Sticks as 4 digital directions: left = WASD, right = IJKL.
 enum { S_LU, S_LD, S_LL, S_LR, S_RU, S_RD, S_RL, S_RR, S_COUNT };
 static const unsigned short kStickKey[S_COUNT] = { K_W, K_S, K_A, K_D, K_I, K_K, K_J, K_L };
 
@@ -216,7 +216,7 @@ static uint32_t kbd_buttons[MAX_PADS];
 static uint8_t  kbd_sticks[MAX_PADS];
 
 static void stick_bits(uint8_t v, int lo, int hi, uint8_t *bits, uint8_t prev) {
-  // Umbral con histéresis: entra a 60 del centro, sale a 40.
+  // Threshold with hysteresis: on at 60 from centre, off at 40.
   int d = (int)v - 128;
   bool was_lo = (prev >> lo) & 1, was_hi = (prev >> hi) & 1;
   if (d <= -60 || (was_lo && d <= -40)) *bits |= (uint8_t)(1u << lo);
@@ -236,13 +236,13 @@ static void kbd_update(ds3_t *p) {
   pad_state_t *s = &states[slot];
   uint32_t now = s->buttons;
 
-  // PS (flanco de subida) activa/desactiva el modo teclado. LED1 = activo, LED4 = pausado.
+  // PS (rising edge) toggles keyboard mode. LED1 = active, LED4 = paused.
   static uint32_t ps_prev[MAX_PADS];
   bool ps = (now >> B_PS) & 1u;
   if (ps && !((ps_prev[slot] >> B_PS) & 1u)) {
     kbd_enabled = !kbd_enabled;
     if (!kbd_enabled) kbd_release_all(slot);
-    printf("\n"); LOG("Modo teclado %s", kbd_enabled ? "ACTIVADO" : "PAUSADO");
+    printf("\n"); LOG("Keyboard mode %s", kbd_enabled ? "ON" : "PAUSED");
     p->need_output = true; request_send(p);
   }
   ps_prev[slot] = now;
@@ -273,7 +273,7 @@ static void print_state(ds3_t *p) {
 }
 
 // ---------------------------------------------------------------------------
-// Servidor DSU ("cemuhook"), UDP 127.0.0.1:26760 — lo leen Dolphin, Cemu, etc.
+// DSU ("cemuhook") server, UDP 127.0.0.1:26760 — read by Dolphin, Cemu, etc.
 // ---------------------------------------------------------------------------
 
 #include <arpa/inet.h>
@@ -312,7 +312,7 @@ static void put16(uint8_t *p, uint16_t v) { p[0] = v & 0xFF; p[1] = v >> 8; }
 static void put32(uint8_t *p, uint32_t v) { for (int i = 0; i < 4; i++) p[i] = (v >> (8 * i)) & 0xFF; }
 static void putf(uint8_t *p, float f) { uint32_t v; memcpy(&v, &f, 4); put32(p, v); }
 
-// Cabecera (16) + tipo de mensaje (4). Devuelve el puntero al cuerpo.
+// Header (16) + message type (4). Returns a pointer to the body.
 static uint8_t *dsu_begin(uint8_t *pkt, uint32_t type) {
   memcpy(pkt, "DSUS", 4);
   put16(pkt + 4, DSU_PROTO);
@@ -333,12 +333,12 @@ static uint8_t dsu_battery(uint8_t b) {
                case 0x01: return 0x01; default: return 0x00; }
 }
 
-// Los 11 bytes comunes: slot, estado, modelo, conexión, MAC, batería.
+// The 11 shared bytes: slot, state, model, connection, MAC, battery.
 static uint8_t *dsu_shared(uint8_t *p, int slot) {
   bool on = slot < MAX_PADS && pads[slot].used && pads[slot].intr_open;
   p[0] = (uint8_t)slot;
-  p[1] = on ? 2 : 0;          // 2 = conectado
-  p[2] = on ? 2 : 0;          // 2 = giroscopio completo (aprox. en el DS3)
+  p[1] = on ? 2 : 0;          // 2 = connected
+  p[2] = on ? 2 : 0;          // 2 = full gyro (approximate on the DS3)
   p[3] = on ? 2 : 0;          // 2 = Bluetooth
   if (on) for (int i = 0; i < 6; i++) p[4 + i] = pads[slot].addr[i]; else memset(p + 4, 0, 6);
   p[10] = on ? dsu_battery(states[slot].battery) : 0;
@@ -350,7 +350,7 @@ static void dsu_send_data(int slot, const struct sockaddr_in *to) {
   uint8_t pkt[100]; memset(pkt, 0, sizeof pkt);
   uint8_t *p = dsu_shared(dsu_begin(pkt, 0x100002), slot);
   uint32_t b = s->buttons;
-  *p++ = 1;                                         // conectado
+  *p++ = 1;                                         // connected
   put32(p, dsu_packet_no[slot]); p += 4;
   uint8_t b1 = 0, b2 = 0;
   if (b & (1u << B_LEFT))   b1 |= 0x80;
@@ -370,23 +370,23 @@ static void dsu_send_data(int slot, const struct sockaddr_in *to) {
   if (b & (1u << B_R2))     b2 |= 0x02;
   if (b & (1u << B_L2))     b2 |= 0x01;
   *p++ = b1; *p++ = b2;
-  *p++ = (b & (1u << B_PS)) ? 1 : 0;               // botón PS / Home
-  *p++ = 0;                                         // botón táctil
-  *p++ = s->lx; *p++ = (uint8_t)(255 - s->ly);      // DSU: Y positivo hacia arriba
+  *p++ = (b & (1u << B_PS)) ? 1 : 0;               // PS / Home button
+  *p++ = 0;                                         // touch button
+  *p++ = s->lx; *p++ = (uint8_t)(255 - s->ly);      // DSU: positive Y is up
   *p++ = s->rx; *p++ = (uint8_t)(255 - s->ry);
-  // Analógicos: cruceta L, D, R, U; luego Y(tri) B(circ) A(cross) X(square); R1 L1 R2 L2
+  // Analog: D-pad L, D, R, U; then Y(tri) B(circ) A(cross) X(square); R1 L1 R2 L2
   *p++ = s->pr[3]; *p++ = s->pr[2]; *p++ = s->pr[1]; *p++ = s->pr[0];
   *p++ = s->pr[8]; *p++ = s->pr[9]; *p++ = s->pr[10]; *p++ = s->pr[11];
   *p++ = s->pr[7]; *p++ = s->pr[6]; *p++ = s->pr[5]; *p++ = s->pr[4];
-  p += 12;                                          // 2 toques táctiles (vacíos)
+  p += 12;                                          // 2 touch points (empty)
   uint64_t us = (uint64_t)btstack_run_loop_get_time_ms() * 1000u;
   for (int i = 0; i < 8; i++) *p++ = (uint8_t)(us >> (8 * i));
-  // Acelerómetro: ~512 = 0 g, ~113 unidades por g (aprox.). Giro: solo eje Z.
+  // Accelerometer: ~512 = 0 g, ~113 units per g (approx.). Gyro: Z axis only.
   putf(p, -(s->acc[0] - 512) / 113.0f); p += 4;
   putf(p,  (s->acc[2] - 512) / 113.0f); p += 4;
   putf(p, -(s->acc[1] - 512) / 113.0f); p += 4;
   putf(p, 0.0f); p += 4;                                     // pitch
-  putf(p, -(s->gyro - 498) * 1.0f); p += 4;                  // yaw (aprox.)
+  putf(p, -(s->gyro - 498) * 1.0f); p += 4;                  // yaw (approx.)
   putf(p, 0.0f); p += 4;                                     // roll
   dsu_finish_send(pkt, (size_t)(p - pkt), to);
 }
@@ -411,7 +411,7 @@ static void dsu_register(const struct sockaddr_in *from) {
   }
   if (free_i < 0) return;
   dsu_clients[free_i].used = true; dsu_clients[free_i].addr = *from; dsu_clients[free_i].last_ms = now;
-  printf("\n"); LOG("DSU: cliente conectado (%s:%u)", inet_ntoa(from->sin_addr), ntohs(from->sin_port));
+  printf("\n"); LOG("DSU: client connected (%s:%u)", inet_ntoa(from->sin_addr), ntohs(from->sin_port));
 }
 
 static void dsu_on_readable(btstack_data_source_t *ds, btstack_data_source_callback_type_t type) {
@@ -422,11 +422,11 @@ static void dsu_on_readable(btstack_data_source_t *ds, btstack_data_source_callb
     if (n < 20 || memcmp(buf, "DSUC", 4) != 0) continue;
     uint32_t msg = (uint32_t)buf[16] | ((uint32_t)buf[17] << 8) | ((uint32_t)buf[18] << 16) | ((uint32_t)buf[19] << 24);
     uint8_t pkt[64];
-    if (msg == 0x100000) {                         // versión
+    if (msg == 0x100000) {                         // version
       uint8_t *p = dsu_begin(memset(pkt, 0, sizeof pkt), 0x100000);
       put16(p, DSU_PROTO); p += 2;
       dsu_finish_send(pkt, (size_t)(p - pkt), &from);
-    } else if (msg == 0x100001 && n >= 24) {       // info de puertos
+    } else if (msg == 0x100001 && n >= 24) {       // port info
       int32_t cnt = (int32_t)(buf[20] | (buf[21] << 8) | (buf[22] << 16) | (buf[23] << 24));
       for (int i = 0; i < cnt && i < 4 && 24 + i < n; i++) {
         uint8_t slot = buf[24 + i]; if (slot >= 4) continue;
@@ -434,7 +434,7 @@ static void dsu_on_readable(btstack_data_source_t *ds, btstack_data_source_callb
         *p++ = 0;
         dsu_finish_send(pkt, (size_t)(p - pkt), &from);
       }
-    } else if (msg == 0x100002) {                  // suscripción a datos
+    } else if (msg == 0x100002) {                  // data subscription
       dsu_register(&from);
     }
     fl = sizeof from;
@@ -448,13 +448,13 @@ static void dsu_start(void) {
   struct sockaddr_in a; memset(&a, 0, sizeof a);
   a.sin_family = AF_INET; a.sin_port = htons(DSU_PORT); a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   int one = 1; setsockopt(dsu_fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
-  if (bind(dsu_fd, (struct sockaddr *)&a, sizeof a) != 0) { LOG("DSU: no se pudo abrir el puerto %d", DSU_PORT); close(dsu_fd); dsu_fd = -1; return; }
+  if (bind(dsu_fd, (struct sockaddr *)&a, sizeof a) != 0) { LOG("DSU: could not open port %d", DSU_PORT); close(dsu_fd); dsu_fd = -1; return; }
   fcntl(dsu_fd, F_SETFL, fcntl(dsu_fd, F_GETFL) | O_NONBLOCK);
   btstack_run_loop_set_data_source_fd(&dsu_ds, dsu_fd);
   btstack_run_loop_set_data_source_handler(&dsu_ds, dsu_on_readable);
   btstack_run_loop_enable_data_source_callbacks(&dsu_ds, DATA_SOURCE_CALLBACK_READ);
   btstack_run_loop_add_data_source(&dsu_ds);
-  LOG("Servidor DSU escuchando en 127.0.0.1:%d", DSU_PORT);
+  LOG("DSU server listening on 127.0.0.1:%d", DSU_PORT);
 }
 
 static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint16_t size) {
@@ -462,7 +462,7 @@ static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint1
     ds3_t *p = pad_by_cid(channel);
     if (!p) return;
     if (channel == p->intr_cid && size >= 50 && packet[0] == 0xA1 && packet[1] == 0x01) {
-      if (p->reports++ == 0) { LOG("¡Llegan datos del mando %u! (Ctrl-C para salir)", p->slot + 1); }
+      if (p->reports++ == 0) { LOG("Receiving data from controller %u! (Ctrl-C to quit)", p->slot + 1); }
       decode(p->slot, packet + 1);
       dsu_broadcast(p->slot);
       kbd_update(p);
@@ -480,7 +480,7 @@ static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint1
       uint16_t psm = l2cap_event_incoming_connection_get_psm(packet);
       uint16_t cid = l2cap_event_incoming_connection_get_local_cid(packet);
       bd_addr_t a; l2cap_event_incoming_connection_get_address(packet, a);
-      LOG("canal entrante PSM 0x%02X desde %s -> aceptado", psm, bd_addr_to_str(a));
+      LOG("incoming channel PSM 0x%02X from %s -> accepted", psm, bd_addr_to_str(a));
       l2cap_accept_connection(cid);
       break;
     }
@@ -490,12 +490,12 @@ static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint1
       uint16_t cid = l2cap_event_channel_opened_get_local_cid(packet);
       hci_con_handle_t h = l2cap_event_channel_opened_get_handle(packet);
       bd_addr_t a; l2cap_event_channel_opened_get_address(packet, a);
-      if (st) { LOG("canal PSM 0x%02X falló (0x%02X)", psm, st); break; }
+      if (st) { LOG("channel PSM 0x%02X failed (0x%02X)", psm, st); break; }
       ds3_t *p = pad_new(h, a);
-      if (!p) { LOG("demasiados mandos"); l2cap_disconnect(cid); break; }
+      if (!p) { LOG("too many controllers"); l2cap_disconnect(cid); break; }
       if (psm == PSM_HID_CONTROL)   { p->ctrl_cid = cid; p->ctrl_open = true; }
       if (psm == PSM_HID_INTERRUPT) { p->intr_cid = cid; p->intr_open = true; }
-      LOG("canal PSM 0x%02X abierto (mando %u)", psm, p->slot + 1);
+      LOG("channel PSM 0x%02X open (controller %u)", psm, p->slot + 1);
       if (p->ctrl_open && p->intr_open) {
         p->need_enable = true;
         request_send(p);
@@ -512,7 +512,7 @@ static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint1
       ds3_t *p = pad_by_cid(cid);
       if (!p) break;
       printf("\n");
-      LOG("canal cerrado (mando %u)", p->slot + 1);
+      LOG("channel closed (controller %u)", p->slot + 1);
       if (cid == p->ctrl_cid) { p->ctrl_open = false; p->ctrl_cid = 0; }
       if (cid == p->intr_cid) { p->intr_open = false; p->intr_cid = 0; }
       if (!p->ctrl_open && !p->intr_open) { kbd_release_all(p->slot); p->used = false; memset(&states[p->slot], 0, sizeof states[0]); }
@@ -522,8 +522,8 @@ static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint1
   }
 }
 
-// Guarda la dirección Bluetooth del adaptador para que el script de emparejado
-// sepa qué dirección grabar en el mando (no hay que escribirla a mano).
+// Saves the adapter's Bluetooth address so the pairing script knows which
+// address to write into the controller (no need to type it by hand).
 static void save_adapter_address(bd_addr_t a) {
   const char *home = getenv("HOME");
   if (!home) return;
@@ -546,27 +546,27 @@ static void hci_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint16_
       if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING) {
         gap_local_bd_addr(a);
         printf("\n");
-        LOG("Adaptador listo. Dirección Bluetooth del adaptador: %s", bd_addr_to_str(a));
+        LOG("Adapter ready. Adapter Bluetooth address: %s", bd_addr_to_str(a));
         save_adapter_address(a);
-        LOG("Esperando al DualShock 3... (pulsa PS)");
+        LOG("Waiting for the DualShock 3... (press PS)");
       }
       break;
     case HCI_EVENT_CONNECTION_REQUEST:
       hci_event_connection_request_get_bd_addr(packet, a);
-      LOG("petición de conexión de %s", bd_addr_to_str(a));
+      LOG("connection request from %s", bd_addr_to_str(a));
       break;
     case HCI_EVENT_CONNECTION_COMPLETE:
       hci_event_connection_complete_get_bd_addr(packet, a);
-      LOG("enlace con %s: status 0x%02X", bd_addr_to_str(a), hci_event_connection_complete_get_status(packet));
+      LOG("link with %s: status 0x%02X", bd_addr_to_str(a), hci_event_connection_complete_get_status(packet));
       break;
     case HCI_EVENT_DISCONNECTION_COMPLETE:
       printf("\n");
-      LOG("enlace cerrado (motivo 0x%02X)", hci_event_disconnection_complete_get_reason(packet));
+      LOG("link closed (reason 0x%02X)", hci_event_disconnection_complete_get_reason(packet));
       break;
     case HCI_EVENT_PIN_CODE_REQUEST:
-      // No debería pasar con el DS3; si pasa, lo rechazamos en lugar de colgar.
+      // Should not happen with the DS3; if it does, reject instead of hanging.
       hci_event_pin_code_request_get_bd_addr(packet, a);
-      LOG("petición de PIN de %s -> rechazada", bd_addr_to_str(a));
+      LOG("PIN request from %s -> rejected", bd_addr_to_str(a));
       gap_pin_code_negative(a);
       break;
     default: break;
@@ -582,7 +582,7 @@ int btstack_main(int argc, const char *argv[]) {
   hci_add_event_handler(&hci_cb);
 
   l2cap_init();
-  // Nivel de seguridad 0: sin autenticación ni cifrado, como la PS3.
+  // Security level 0: no authentication or encryption, like the PS3.
   gap_set_security_mode(GAP_SECURITY_MODE_2);
   gap_set_security_level(LEVEL_0);
   gap_ssp_set_enable(0);
@@ -590,16 +590,16 @@ int btstack_main(int argc, const char *argv[]) {
   l2cap_register_service(l2cap_handler, PSM_HID_INTERRUPT, 100, LEVEL_0);
 
   gap_set_local_name("DS3Bridge");
-  gap_set_class_of_device(0x0C010C);   // ordenador portátil
+  gap_set_class_of_device(0x0C010C);   // laptop computer
   gap_connectable_control(1);
   gap_discoverable_control(0);
 
   dsu_start();
   kbd_enabled = true;
   kbd_ok = kbd_init(true);
-  if (kbd_ok && kbd_is_vhid()) LOG("Modo teclado: teclado virtual HID de Karabiner (PS lo pausa/reanuda).");
-  else if (kbd_ok) LOG("Modo teclado listo (PS lo pausa/reanuda).");
-  else LOG("Modo teclado SIN PERMISO: activa Terminal en Ajustes > Privacidad y seguridad > Accesibilidad y reinicia el programa.");
+  if (kbd_ok && kbd_is_vhid()) LOG("Keyboard mode: Karabiner virtual HID keyboard (PS pauses/resumes it).");
+  else if (kbd_ok) LOG("Keyboard mode ready (PS pauses/resumes it).");
+  else LOG("Keyboard mode has NO PERMISSION: enable Terminal in System Settings > Privacy & Security > Accessibility and restart the program.");
   hci_power_control(HCI_POWER_ON);
   return 0;
 }

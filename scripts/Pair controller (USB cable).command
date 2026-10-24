@@ -1,17 +1,17 @@
 #!/bin/zsh
-# Graba en el DualShock 3 la dirección Bluetooth del adaptador USB, para que se
-# conecte a él al pulsar PS. Hace falta una vez (y otra vez si usas el mando en
-# una PS3 u otro aparato). Conecta el mando por cable USB antes de abrir esto.
+# Writes the USB adapter's Bluetooth address into the DualShock 3, so it connects
+# to it when you press PS. Needed once (and again if you use the controller with
+# a PS3 or another device). Connect the controller by USB cable before opening this.
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ADDR_FILE="$HOME/Library/Application Support/DS3Bridge/adapter-address"
 if [ ! -f "$ADDR_FILE" ]; then
-  echo "Aún no conozco la dirección de tu adaptador."
-  echo "Abre 'Start DS3Bridge' una vez con el adaptador enchufado (guarda la dirección), ciérralo y vuelve a abrir este script."
-  read -k 1 "?Pulsa una tecla para cerrar..."; exit 1
+  echo "The adapter address is not known yet."
+  echo "Open 'Start DS3Bridge' once with the adapter plugged in (it saves the address), close it and open this script again."
+  read -k 1 "?Press any key to close..."; exit 1
 fi
 ADDR="$(head -1 "$ADDR_FILE")"
-echo "Dirección del adaptador: $ADDR"
+echo "Adapter address: $ADDR"
 "$ROOT/bin/ds3bt" pair "$ADDR"
 echo
-echo "Si pone OK: desconecta el cable, abre 'Start DS3Bridge' y pulsa PS."
-read -k 1 "?Pulsa una tecla para cerrar..."
+echo "If it says OK: unplug the cable, open 'Start DS3Bridge' and press PS."
+read -k 1 "?Press any key to close..."

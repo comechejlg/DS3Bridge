@@ -1,7 +1,7 @@
 //
-// btstack_config.h — DS3Bridge (basado en el de port/libusb de BTstack).
-// Solo Bluetooth clásico: sin BLE, sin SCO/audio (transferencias isócronas USB),
-// sin mesh. Así funciona también con adaptadores antiguos (Bluetooth 2.x).
+// btstack_config.h — DS3Bridge (based on BTstack's port/libusb one).
+// Classic Bluetooth only: no BLE, no SCO/audio (USB isochronous transfers),
+// no mesh. This way it also works with old adapters (Bluetooth 2.x).
 //
 
 #ifndef BTSTACK_CONFIG_H

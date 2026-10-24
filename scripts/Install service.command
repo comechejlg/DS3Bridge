@@ -1,16 +1,16 @@
 #!/bin/zsh
-# Instala el teclado virtual de DS3Bridge como servicio del sistema (arranca solo con el Mac)
-# y crea DS3Bridge.app en Aplicaciones. Pide la contraseña UNA vez.
+# Installs the DS3Bridge virtual keyboard as a system service (starts with the Mac)
+# and creates DS3Bridge.app in Applications. Asks for your password ONCE.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ME_UID=$(id -u)
 DAEMON='/Library/Application Support/org.pqrs/Karabiner-DriverKit-VirtualHIDDevice/Applications/Karabiner-VirtualHIDDevice-Daemon.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Daemon'
-[ -x "$ROOT/bin/vhidkbd" ] || { echo "Primero compila con ./build.sh"; exit 1; }
-[ -x "$DAEMON" ] || { echo "Primero instala el driver con 'Install Karabiner driver'"; exit 1; }
-echo "Instalando el servicio de DS3Bridge (se pedirá tu contraseña)..."
+[ -x "$ROOT/bin/vhidkbd" ] || { echo "Build first with ./build.sh"; exit 1; }
+[ -x "$DAEMON" ] || { echo "Install the driver first with 'Install Karabiner driver'"; exit 1; }
+echo "Installing the DS3Bridge service (you will be asked for your password)..."
 sudo -v
 
-# El binario va a una carpeta solo-root: un servicio root no debe ejecutar ficheros editables por el usuario.
+# The binary goes to a root-only folder: a root service must not run files the user can edit.
 sudo mkdir -p /usr/local/libexec/ds3bridge
 sudo cp "$ROOT/bin/vhidkbd" /usr/local/libexec/ds3bridge/vhidkbd
 sudo chown -R root:wheel /usr/local/libexec/ds3bridge
@@ -27,7 +27,7 @@ sudo tee /Library/LaunchDaemons/com.ds3bridge.karabiner-daemon.plist >/dev/null 
 </dict></plist>
 PLIST
 
-# El socket queda con dueño = tu usuario y permisos 0600: solo tú puedes mandar teclas al teclado virtual.
+# The socket is owned by your user with mode 0600: only you can send keys to the virtual keyboard.
 sudo tee /Library/LaunchDaemons/com.ds3bridge.vhidkbd.plist >/dev/null <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -50,15 +50,15 @@ for s in karabiner-daemon vhidkbd; do
   sudo launchctl bootstrap system /Library/LaunchDaemons/com.ds3bridge.$s.plist
 done
 
-# App en Aplicaciones que abre el lanzador
+# App in Applications that opens the launcher
 rm -rf /Applications/DS3Bridge.app
 osacompile -o /Applications/DS3Bridge.app \
   -e "do shell script \"open -a Terminal \" & quoted form of \"$ROOT/scripts/Start DS3Bridge.command\""
 
 sleep 3
 if [ -S /var/run/ds3bridge.sock ]; then
-  echo; echo "✅ Instalado. Abre DS3Bridge desde Aplicaciones: ya no pedirá contraseña."
+  echo; echo "✅ Installed. Open DS3Bridge from Applications: no password needed from now on."
 else
-  echo; echo "⚠️  El servicio aún no ha creado su socket. Mira /var/log/ds3bridge-vhidkbd.log"
+  echo; echo "⚠️  The service has not created its socket yet. Check /var/log/ds3bridge-vhidkbd.log"
 fi
-read -k 1 "?Pulsa una tecla para cerrar..."
+read -k 1 "?Press any key to close..."

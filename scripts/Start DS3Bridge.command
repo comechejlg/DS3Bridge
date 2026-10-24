@@ -1,14 +1,14 @@
 #!/bin/zsh
-# Arranca DS3Bridge. Cuando ponga "Esperando", pulsa PS en el mando.
-# Para pararlo: cierra esta ventana o pulsa Ctrl+C.
+# Starts DS3Bridge. When it says "Waiting", press PS on the controller.
+# To stop it: close this window or press Ctrl+C.
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 pkill -f "bin/ds3host" 2>/dev/null
-if [ ! -x "$ROOT/bin/ds3host" ]; then echo "Primero compila con ./build.sh"; read -k 1; exit 1; fi
+if [ ! -x "$ROOT/bin/ds3host" ]; then echo "Build first with ./build.sh"; read -k 1; exit 1; fi
 if [ -S /var/run/ds3bridge.sock ]; then
-  echo "Modo teclado: teclado virtual HID (Karabiner)."
+  echo "Keyboard mode: virtual HID keyboard (Karabiner)."
 else
-  echo "Aviso: el servicio de teclado virtual no está instalado; se usarán teclas sintéticas"
-  echo "(valen para la mayoría de apps, pero no para jugar en OpenEmu)."
+  echo "Note: the virtual keyboard service is not installed; synthetic keys will be used"
+  echo "(fine for most apps, but not for OpenEmu gameplay)."
 fi
 echo
 cd "$ROOT/bin" && exec ./ds3host

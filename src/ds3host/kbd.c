@@ -1,12 +1,12 @@
-// kbd.c — salida de teclado del mando.
+// kbd.c — keyboard output for the controller.
 //
-// Dos modos:
-//  * Teclado virtual HID (Karabiner) — si existe el socket de vhidkbd (servicio del
-//    sistema). Las teclas se mandan a vhidkbd (root) por ese socket Unix, que las convierte en un
-//    teclado HID "real". Necesario para OpenEmu-Silicon, que en partida solo lee
-//    teclados HID y descarta las pulsaciones sintéticas.
-//  * Teclas sintéticas (CGEvent) — por defecto. Valen para la mayoría de apps.
-//    Requiere permiso de Accesibilidad para la app que lanza el programa.
+// Two modes:
+//  * Virtual HID keyboard (Karabiner) — when the vhidkbd socket (system service)
+//    exists. Keys are sent to vhidkbd (root) over that Unix socket, which turns them
+//    into a "real" HID keyboard. Needed for OpenEmu-Silicon, which only reads HID
+//    keyboards during gameplay and drops synthetic key presses.
+//  * Synthetic keys (CGEvent) — fallback. Fine for most apps.
+//    Needs Accessibility permission for the app that launches the program.
 #include <ApplicationServices/ApplicationServices.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -24,7 +24,7 @@ static int vhid_fd = -1;
 static struct sockaddr_un vhid_addr;
 #define VHID_SOCK "/var/run/ds3bridge.sock"
 
-// Tecla virtual de macOS (kVK_*) -> uso HID de teclado (página 0x07).
+// macOS virtual key (kVK_*) -> HID keyboard usage (page 0x07).
 static uint16_t mac_to_hid(unsigned short k) {
   switch (k) {
     case 0x00: return 0x04; /* A */   case 0x01: return 0x16; /* S */
@@ -37,9 +37,9 @@ static uint16_t mac_to_hid(unsigned short k) {
     case 0x22: return 0x0C; /* I */   case 0x25: return 0x0F; /* L */
     case 0x26: return 0x0D; /* J */   case 0x28: return 0x0E; /* K */
     case 0x2D: return 0x11; /* N */   case 0x2E: return 0x10; /* M */
-    case 0x24: return 0x28; /* Intro */
-    case 0x7B: return 0x50; /* Izq */ case 0x7C: return 0x4F; /* Der */
-    case 0x7D: return 0x51; /* Abajo */ case 0x7E: return 0x52; /* Arriba */
+    case 0x24: return 0x28; /* Return */
+    case 0x7B: return 0x50; /* Left */ case 0x7C: return 0x4F; /* Right */
+    case 0x7D: return 0x51; /* Down */ case 0x7E: return 0x52; /* Up */
     default: return 0;
   }
 }
@@ -54,7 +54,7 @@ bool kbd_init(bool prompt) {
     strlcpy(vhid_addr.sun_path, VHID_SOCK, sizeof vhid_addr.sun_path);
     return vhid_fd >= 0;
   }
-  // OJO OpenEmu: descarta las teclas con "proceso origen" 0; marcamos nuestro PID.
+  // Note: OpenEmu drops key events whose source process is 0, so we tag our own PID.
   src = CGEventSourceCreate(kCGEventSourceStatePrivate);
   const void *k[] = { kAXTrustedCheckOptionPrompt };
   const void *vv[] = { prompt ? kCFBooleanTrue : kCFBooleanFalse };

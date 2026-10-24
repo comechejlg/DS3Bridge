@@ -66,13 +66,13 @@ cd DS3Bridge
 
 ### 2. First run (learn the adapter address)
 
-Plug in the USB Bluetooth adapter and double-click **`scripts/Start DS3Bridge.command`**. You should see `Adaptador listo. Dirección Bluetooth del adaptador: …` ("adapter ready"). The address is saved to `~/Library/Application Support/DS3Bridge/adapter-address`. Close the window.
+Plug in the USB Bluetooth adapter and double-click **`scripts/Start DS3Bridge.command`**. You should see `Adapter ready. Adapter Bluetooth address: …`. The address is saved to `~/Library/Application Support/DS3Bridge/adapter-address`. Close the window.
 
 macOS may ask to give Terminal **Accessibility** permission; this is only needed for the synthetic-key fallback (see step 5) and you can skip it if you will install the Karabiner service.
 
 ### 3. Pair the controller (once)
 
-Connect the DS3 with its USB cable and double-click **`scripts/Pair controller (USB cable).command`**. It must end with `OK: el mando apunta ya a este Mac.` ("the controller now points to this Mac"). Unplug the cable.
+Connect the DS3 with its USB cable and double-click **`scripts/Pair controller (USB cable).command`**. It must end with `OK: the controller now points to this Mac.` Unplug the cable.
 
 You only repeat this if you use the controller with a PS3 or another device.
 
@@ -111,7 +111,6 @@ Without the service, keyboard mode falls back to synthetic key events (needs Acc
 
 - The pressure-sensitive buttons are read from their analog value with a threshold, because some controllers report the digital bits as "pressed" at rest.
 - Motion data sent over DSU is approximate (the DS3 has a 3-axis accelerometer and a single gyro axis).
-- On-screen messages of the programs are currently in Spanish.
 
 ## Tested hardware
 

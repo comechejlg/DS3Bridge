@@ -68,13 +68,13 @@ cd DS3Bridge
 
 ### 2. Primer arranque (aprender la dirección del adaptador)
 
-Enchufa el adaptador Bluetooth USB y haz doble clic en **`scripts/Start DS3Bridge.command`**. Debe aparecer `Adaptador listo. Dirección Bluetooth del adaptador: …`. La dirección se guarda en `~/Library/Application Support/DS3Bridge/adapter-address`. Cierra la ventana.
+Enchufa el adaptador Bluetooth USB y haz doble clic en **`scripts/Start DS3Bridge.command`**. Debe aparecer `Adapter ready. Adapter Bluetooth address: …` (adaptador listo). La dirección se guarda en `~/Library/Application Support/DS3Bridge/adapter-address`. Cierra la ventana.
 
 macOS puede pedir permiso de **Accesibilidad** para Terminal: solo hace falta para el modo de teclas sintéticas (ver paso 5); puedes omitirlo si vas a instalar el servicio de Karabiner.
 
 ### 3. Emparejar el mando (una vez)
 
-Conecta el DS3 con su cable USB y haz doble clic en **`scripts/Pair controller (USB cable).command`**. Debe terminar con `OK: el mando apunta ya a este Mac.` Desconecta el cable.
+Conecta el DS3 con su cable USB y haz doble clic en **`scripts/Pair controller (USB cable).command`**. Debe terminar con `OK: the controller now points to this Mac.` (el mando ya apunta a este Mac). Desconecta el cable.
 
 Solo hay que repetirlo si usas el mando con una PS3 u otro aparato.
 
@@ -113,7 +113,7 @@ El **botón PS** pausa o reanuda el modo teclado (LED 1 = activo, LED 4 = en pau
 
 - Los botones sensibles a la presión se leen por su valor analógico con un umbral, porque algunos mandos dan por pulsados los bits digitales en reposo.
 - El movimiento que se envía por DSU es aproximado (el DS3 tiene acelerómetro de 3 ejes y un solo eje de giroscopio).
-- Los mensajes de los programas están, de momento, en español.
+- Los mensajes de los programas están en inglés.
 
 ## Hardware probado
 
