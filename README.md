@@ -30,9 +30,20 @@ The DS3 never does real Bluetooth pairing (no link key). macOS 12+ requires auth
 ## Requirements
 
 - A Mac with macOS 13 or newer (developed on macOS 26, Apple Silicon).
-- A **USB Bluetooth adapter**. Only an old ISSC `0x1131:0x1004` (Bluetooth 2.1) has been tested; other standard USB Bluetooth dongles *should* work, but that is unconfirmed — please report yours. On Apple Silicon, macOS does not use external adapters, so it stays free for DS3Bridge. A USB-A → USB-C adapter if needed.
-- A DualShock 3 (or Sixaxis) and its USB cable (only for the one-time pairing).
+- A **USB Bluetooth adapter**. Only an old ISSC `0x1131:0x1004` (Bluetooth 2.1) has been tested; other standard USB Bluetooth dongles *should* work, but that is unconfirmed — please report yours. On Apple Silicon, macOS does not use external adapters, so it stays free for DS3Bridge. A USB-C hub or USB-C → USB-A adapter if your Mac only has USB-C.
+- A DualShock 3 (or Sixaxis) and a **Mini-USB** cable (only for the one-time pairing).
 - Xcode Command Line Tools (`xcode-select --install`) and [Homebrew](https://brew.sh) with `libusb` and `pkg-config`.
+
+### The hardware
+
+<table>
+<tr>
+<td align="center" width="25%"><img src="docs/images/hardware-dualshock3.jpg" width="200" alt="DualShock 3"><br><sub>DualShock 3</sub></td>
+<td align="center" width="25%"><img src="docs/images/hardware-bluetooth-adapter.jpg" width="200" alt="USB Bluetooth adapter"><br><sub>USB Bluetooth adapter</sub></td>
+<td align="center" width="25%"><img src="docs/images/hardware-usbc-adapter.jpg" width="200" alt="USB-C hub with USB-A ports"><br><sub>USB-C hub (or USB-C → USB-A adapter)</sub></td>
+<td align="center" width="25%"><img src="docs/images/hardware-mini-usb-cable.jpg" width="200" alt="Mini-USB cable (pairing only)"><br><sub>Mini-USB cable (pairing only)</sub></td>
+</tr>
+</table>
 
 ## Step by step
 

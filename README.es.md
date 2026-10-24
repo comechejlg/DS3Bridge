@@ -30,9 +30,20 @@ El DS3 nunca hace un emparejamiento Bluetooth real (no tiene clave de enlace). m
 ## Qué necesitas
 
 - Un Mac con macOS 13 o posterior (desarrollado en macOS 26, Apple Silicon).
-- Un **adaptador Bluetooth USB**. Solo se ha probado uno antiguo ISSC `0x1131:0x1004` (Bluetooth 2.1); otros adaptadores USB estándar *deberían* funcionar, pero no está confirmado: si pruebas el tuyo, cuéntalo. En Apple Silicon macOS no usa adaptadores externos, así que queda libre para DS3Bridge. Un adaptador USB-A → USB-C si hace falta.
-- Un DualShock 3 (o Sixaxis) y su cable USB (solo para emparejarlo una vez).
+- Un **adaptador Bluetooth USB**. Solo se ha probado uno antiguo ISSC `0x1131:0x1004` (Bluetooth 2.1); otros adaptadores USB estándar *deberían* funcionar, pero no está confirmado: si pruebas el tuyo, cuéntalo. En Apple Silicon macOS no usa adaptadores externos, así que queda libre para DS3Bridge. Un hub USB-C o un adaptador USB-C a USB-A si tu Mac solo tiene USB-C.
+- Un DualShock 3 (o Sixaxis) y un cable **Mini-USB** (solo para emparejarlo una vez).
 - Las Command Line Tools de Xcode (`xcode-select --install`) y [Homebrew](https://brew.sh) con `libusb` y `pkg-config`.
+
+### El hardware
+
+<table>
+<tr>
+<td align="center" width="25%"><img src="docs/images/hardware-dualshock3.jpg" width="200" alt="DualShock 3"><br><sub>DualShock 3</sub></td>
+<td align="center" width="25%"><img src="docs/images/hardware-bluetooth-adapter.jpg" width="200" alt="Antena Bluetooth USB"><br><sub>Antena Bluetooth USB</sub></td>
+<td align="center" width="25%"><img src="docs/images/hardware-usbc-adapter.jpg" width="200" alt="Hub USB-C con puertos USB-A"><br><sub>Hub USB-C (o adaptador USB-C a USB-A)</sub></td>
+<td align="center" width="25%"><img src="docs/images/hardware-mini-usb-cable.jpg" width="200" alt="Cable Mini-USB (solo para emparejar)"><br><sub>Cable Mini-USB (solo para emparejar)</sub></td>
+</tr>
+</table>
 
 ## Paso a paso
 
