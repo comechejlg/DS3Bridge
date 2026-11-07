@@ -361,10 +361,12 @@ static void dsu_send_data(int slot, const struct sockaddr_in *to) {
   if (b & (1u << B_R3))     b1 |= 0x04;
   if (b & (1u << B_L3))     b1 |= 0x02;
   if (b & (1u << B_SELECT)) b1 |= 0x01;
-  if (b & (1u << B_TRI))    b2 |= 0x80;
-  if (b & (1u << B_CIRC))   b2 |= 0x40;
-  if (b & (1u << B_CROSS))  b2 |= 0x20;
-  if (b & (1u << B_SQUARE)) b2 |= 0x10;
+  // Face buttons use Nintendo positions (Y left, B bottom, A right, X top), as in
+  // DS4Windows, BetterJoy and Dolphin: Square, Cross, Circle, Triangle.
+  if (b & (1u << B_SQUARE)) b2 |= 0x80;
+  if (b & (1u << B_CROSS))  b2 |= 0x40;
+  if (b & (1u << B_CIRC))   b2 |= 0x20;
+  if (b & (1u << B_TRI))    b2 |= 0x10;
   if (b & (1u << B_R1))     b2 |= 0x08;
   if (b & (1u << B_L1))     b2 |= 0x04;
   if (b & (1u << B_R2))     b2 |= 0x02;
@@ -374,9 +376,9 @@ static void dsu_send_data(int slot, const struct sockaddr_in *to) {
   *p++ = 0;                                         // touch button
   *p++ = s->lx; *p++ = (uint8_t)(255 - s->ly);      // DSU: positive Y is up
   *p++ = s->rx; *p++ = (uint8_t)(255 - s->ry);
-  // Analog: D-pad L, D, R, U; then Y(tri) B(circ) A(cross) X(square); R1 L1 R2 L2
+  // Analog: D-pad L, D, R, U; then square, cross, circle, triangle; R1 L1 R2 L2
   *p++ = s->pr[3]; *p++ = s->pr[2]; *p++ = s->pr[1]; *p++ = s->pr[0];
-  *p++ = s->pr[8]; *p++ = s->pr[9]; *p++ = s->pr[10]; *p++ = s->pr[11];
+  *p++ = s->pr[11]; *p++ = s->pr[10]; *p++ = s->pr[9]; *p++ = s->pr[8];
   *p++ = s->pr[7]; *p++ = s->pr[6]; *p++ = s->pr[5]; *p++ = s->pr[4];
   p += 12;                                          // 2 touch points (empty)
   uint64_t us = (uint64_t)btstack_run_loop_get_time_ms() * 1000u;
