@@ -30,8 +30,13 @@ typedef struct {
   uint16_t         ctrl_cid, intr_cid;
   bool             ctrl_open, intr_open;
   bool             need_enable, need_output;
-  bool             rumble_on;
+  bool             rumble_on;     // greeting rumble
   uint8_t          stage;         // 1 = greeting rumble pending, 2 = rumble stop pending
+  uint8_t          rumble_big;    // DSU rumble: left (big) motor force, 0..255
+  bool             rumble_small;  // DSU rumble: right (small) motor, which is only on or off
+  uint32_t         rumble_ms;     // time of the last DSU rumble message, for the timeout
+  bool             rumble_logged; // DSU rumble was on when last logged
+  bool             output_quiet;  // the pending output is only a DSU rumble change: don't log it
   uint32_t         reports;
   uint8_t          slot;          // 0..3 -> LED 1..4
 } ds3_t;
@@ -89,6 +94,10 @@ static void build_output(ds3_t *p, uint8_t out[36], bool rumble) {
   };
   memcpy(out, base, 36);
   if (rumble) { out[2] = 0xFE; out[3] = 0xFF; out[4] = 0xFE; out[5] = 0xFF; }
+  else if (p->rumble_big || p->rumble_small) {
+    // As in SDL's PS3 driver: duration 0xFF (until changed), small motor on/off, big motor force.
+    out[2] = 0xFF; out[3] = p->rumble_small ? 1 : 0; out[4] = 0xFF; out[5] = p->rumble_big;
+  }
   // LED: the controller's number; LED 4 while keyboard mode is paused.
   out[10] = kbd_enabled ? (uint8_t)(0x02 << p->slot) : 0x10;
 }
@@ -107,7 +116,7 @@ static void startup_step(btstack_timer_source_t *ts) {
     if (p->stage == 1)      { p->rumble_on = true;  p->stage = 2; again = true; }
     else if (p->stage == 2) { p->rumble_on = false; p->stage = 0; }
     else continue;
-    p->need_output = true; request_send(p);
+    p->output_quiet = false; p->need_output = true; request_send(p);
   }
   if (again) { btstack_run_loop_set_timer(ts, 600); btstack_run_loop_add_timer(ts); }
 }
@@ -135,7 +144,13 @@ static void ctrl_can_send(ds3_t *p) {
     build_output(p, pkt + 1, rumble);
     l2cap_send(p->ctrl_cid, pkt, sizeof pkt);
     p->need_output = false;
-    LOG("-> LED %u%s", p->slot + 1, rumble ? " + rumble" : "");
+    if (!p->output_quiet) LOG("-> LED %u%s", p->slot + 1, rumble ? " + rumble" : "");
+    p->output_quiet = false;
+    bool dsu_rumble = p->rumble_big || p->rumble_small;
+    if (dsu_rumble != p->rumble_logged) {
+      LOG("-> rumble %s (DSU)", dsu_rumble ? "on" : "off");
+      p->rumble_logged = dsu_rumble;
+    }
   }
 }
 
@@ -243,7 +258,7 @@ static void kbd_update(ds3_t *p) {
     kbd_enabled = !kbd_enabled;
     if (!kbd_enabled) kbd_release_all(slot);
     printf("\n"); LOG("Keyboard mode %s", kbd_enabled ? "ON" : "PAUSED");
-    p->need_output = true; request_send(p);
+    p->output_quiet = false; p->need_output = true; request_send(p);
   }
   ps_prev[slot] = now;
   if (!kbd_enabled || !kbd_ok) return;
@@ -416,6 +431,41 @@ static void dsu_register(const struct sockaddr_in *from) {
   printf("\n"); LOG("DSU: client connected (%s:%u)", inet_ntoa(from->sin_addr), ntohs(from->sin_port));
 }
 
+// Rumble, as described in https://github.com/v1993/cemuhook-protocol (an extension to DSU).
+// Both messages start with the same 8-byte controller ID as a data request: flags, slot, MAC.
+// The DS3 has two motors: 0 is the left (big) one, 1 the right (small) one.
+#define DSU_RUMBLE_TIMEOUT_MS 5000   // stop a motor that hasn't been refreshed, as the protocol asks
+
+static int dsu_select_slot(const uint8_t *id) {
+  if (id[0] & 0x02) {                              // by MAC
+    for (int i = 0; i < MAX_PADS; i++)
+      if (pads[i].used && memcmp(pads[i].addr, id + 2, 6) == 0) return i;
+    return -1;
+  }
+  return id[1] < MAX_PADS ? id[1] : -1;            // by slot
+}
+
+static void dsu_rumble(int slot, uint8_t motor, uint8_t intensity) {
+  ds3_t *p = &pads[slot];
+  if (!p->used || !p->ctrl_open || motor > 1) return;
+  p->rumble_ms = btstack_run_loop_get_time_ms();
+  uint8_t big = motor == 0 ? intensity : p->rumble_big;
+  bool small = motor == 1 ? intensity != 0 : p->rumble_small;
+  if (big == p->rumble_big && small == p->rumble_small) return;
+  p->rumble_big = big; p->rumble_small = small;
+  if (!p->need_output) p->output_quiet = true;
+  p->need_output = true; request_send(p);
+}
+
+static void rumble_check_timeout(ds3_t *p) {
+  if (!p->rumble_big && !p->rumble_small) return;
+  if (btstack_run_loop_get_time_ms() - p->rumble_ms < DSU_RUMBLE_TIMEOUT_MS) return;
+  LOG("DSU: no rumble update for %d s, stopping the motors", DSU_RUMBLE_TIMEOUT_MS / 1000);
+  p->rumble_big = 0; p->rumble_small = false;
+  if (!p->need_output) p->output_quiet = true;
+  p->need_output = true; request_send(p);
+}
+
 static void dsu_on_readable(btstack_data_source_t *ds, btstack_data_source_callback_type_t type) {
   (void)ds; (void)type;
   uint8_t buf[256]; struct sockaddr_in from; socklen_t fl = sizeof from;
@@ -438,6 +488,16 @@ static void dsu_on_readable(btstack_data_source_t *ds, btstack_data_source_callb
       }
     } else if (msg == 0x100002) {                  // data subscription
       dsu_register(&from);
+    } else if (msg == 0x110001 && n >= 28) {       // motor count
+      int slot = dsu_select_slot(buf + 20);
+      if (slot >= 0) {
+        uint8_t *p = dsu_shared(dsu_begin(memset(pkt, 0, sizeof pkt), 0x110001), slot);
+        *p++ = (pads[slot].used && pads[slot].ctrl_open) ? 2 : 0;
+        dsu_finish_send(pkt, (size_t)(p - pkt), &from);
+      }
+    } else if (msg == 0x110002 && n >= 30) {       // set one motor
+      int slot = dsu_select_slot(buf + 20);
+      if (slot >= 0) dsu_rumble(slot, buf[28], buf[29]);
     }
     fl = sizeof from;
   }
@@ -467,6 +527,7 @@ static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint1
       if (p->reports++ == 0) { LOG("Receiving data from controller %u! (Ctrl-C to quit)", p->slot + 1); }
       decode(p->slot, packet + 1);
       dsu_broadcast(p->slot);
+      rumble_check_timeout(p);
       kbd_update(p);
       if ((p->reports % 5) == 0) print_state(p);
     } else if (channel == p->ctrl_cid) {
