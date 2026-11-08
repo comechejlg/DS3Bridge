@@ -30,8 +30,17 @@ typedef struct {
   uint16_t         ctrl_cid, intr_cid;
   bool             ctrl_open, intr_open;
   bool             need_enable, need_output;
-  bool             rumble_on;
+  bool             rumble_on;     // greeting rumble
   uint8_t          stage;         // 1 = greeting rumble pending, 2 = rumble stop pending
+  uint8_t          rumble_big;    // DSU rumble: left (big) motor force, 0..255
+  bool             rumble_small;  // DSU rumble: right (small) motor, which is only on or off
+  uint32_t         rumble_ms;     // time of the last DSU rumble message, for the timeout
+  bool             rumble_logged; // DSU rumble was on when last logged
+  bool             output_quiet;  // the pending output is only a DSU rumble change: don't log it
+  bool             awaiting_reply;// a SET_REPORT is out; the next one waits for the controller's handshake
+  bool             sent_enable;   // the SET_REPORT that's out is the enable (else an output report)
+  uint32_t         resends;       // reports resent after NOT_READY since the last rumble log
+  btstack_timer_source_t reply_timer; // resend after NOT_READY, or stop waiting for a lost handshake
   uint32_t         reports;
   uint8_t          slot;          // 0..3 -> LED 1..4
 } ds3_t;
@@ -66,6 +75,7 @@ static ds3_t *pad_new(hci_con_handle_t h, bd_addr_t a) {
   ds3_t *p = pad_by_handle(h);
   if (p) return p;
   for (int i = 0; i < MAX_PADS; i++) if (!pads[i].used) {
+    btstack_run_loop_remove_timer(&pads[i].reply_timer);   // before the memset clears its list link
     memset(&pads[i], 0, sizeof pads[i]);
     pads[i].used = true; pads[i].handle = h; pads[i].slot = (uint8_t)i;
     bd_addr_copy(pads[i].addr, a);
@@ -89,12 +99,51 @@ static void build_output(ds3_t *p, uint8_t out[36], bool rumble) {
   };
   memcpy(out, base, 36);
   if (rumble) { out[2] = 0xFE; out[3] = 0xFF; out[4] = 0xFE; out[5] = 0xFF; }
+  else if (p->rumble_big || p->rumble_small) {
+    // As in SDL's PS3 driver: duration 0xFF (until changed), small motor on/off, big motor force.
+    out[2] = 0xFF; out[3] = p->rumble_small ? 1 : 0; out[4] = 0xFF; out[5] = p->rumble_big;
+  }
   // LED: the controller's number; LED 4 while keyboard mode is paused.
   out[10] = kbd_enabled ? (uint8_t)(0x02 << p->slot) : 0x10;
 }
 
 static void request_send(ds3_t *p) {
   if (p->ctrl_open) l2cap_request_can_send_now_event(p->ctrl_cid);
+}
+
+// The controller answers each SET_REPORT with a handshake. A report sent before it has answered
+// the previous one can be dropped with NOT_READY, so send one at a time, and resend after NOT_READY.
+#define REPLY_TIMEOUT_MS    250   // no handshake: assume it was lost and go on
+#define NOT_READY_RETRY_MS   20   // NOT_READY: send the latest state again after this
+
+static void reply_timer_fired(btstack_timer_source_t *ts) {
+  ds3_t *p = (ds3_t *)btstack_run_loop_get_timer_context(ts);
+  p->awaiting_reply = false;
+  if (p->need_enable || p->need_output) request_send(p);
+}
+static void arm_reply_timer(ds3_t *p, uint32_t ms) {
+  btstack_run_loop_remove_timer(&p->reply_timer);
+  btstack_run_loop_set_timer_handler(&p->reply_timer, reply_timer_fired);
+  btstack_run_loop_set_timer_context(&p->reply_timer, p);
+  btstack_run_loop_set_timer(&p->reply_timer, ms);
+  btstack_run_loop_add_timer(&p->reply_timer);
+}
+static void on_handshake(ds3_t *p, uint8_t result) {
+  if (!p->awaiting_reply) return;
+  if (result == 0x01) {                             // NOT_READY: the report was dropped
+    if (p->sent_enable) p->need_enable = true;
+    else if (!p->need_output) { p->need_output = true; p->output_quiet = true; }
+    p->resends++;
+    arm_reply_timer(p, NOT_READY_RETRY_MS);         // still waiting until the timer fires
+    return;
+  }
+  btstack_run_loop_remove_timer(&p->reply_timer);
+  p->awaiting_reply = false;
+  if (p->need_enable || p->need_output) request_send(p);
+}
+static void report_sent(ds3_t *p, bool enable) {
+  p->awaiting_reply = true; p->sent_enable = enable;
+  arm_reply_timer(p, REPLY_TIMEOUT_MS);
 }
 
 // Greeting: 300 ms after enabling -> LED + rumble; 600 ms later -> rumble off.
@@ -107,7 +156,7 @@ static void startup_step(btstack_timer_source_t *ts) {
     if (p->stage == 1)      { p->rumble_on = true;  p->stage = 2; again = true; }
     else if (p->stage == 2) { p->rumble_on = false; p->stage = 0; }
     else continue;
-    p->need_output = true; request_send(p);
+    p->output_quiet = false; p->need_output = true; request_send(p);
   }
   if (again) { btstack_run_loop_set_timer(ts, 600); btstack_run_loop_add_timer(ts); }
 }
@@ -119,14 +168,15 @@ static void start_greeting(void) {
 }
 
 static void ctrl_can_send(ds3_t *p) {
+  if (p->awaiting_reply) return;      // on_handshake() or the reply timer asks again
   if (p->need_enable) {
     // SET_REPORT | Feature 0xF4: Bluetooth operational mode.
     static const uint8_t enable[] = { 0x53, 0xF4, 0x42, 0x03, 0x00, 0x00 };
     l2cap_send(p->ctrl_cid, (uint8_t *)enable, sizeof enable);
     p->need_enable = false;
+    report_sent(p, true);
     LOG("-> enable (F4 42 03) sent");
     p->stage = 1; start_greeting();
-    if (p->need_output) request_send(p);
     return;
   }
   if (p->need_output) {
@@ -135,7 +185,15 @@ static void ctrl_can_send(ds3_t *p) {
     build_output(p, pkt + 1, rumble);
     l2cap_send(p->ctrl_cid, pkt, sizeof pkt);
     p->need_output = false;
-    LOG("-> LED %u%s", p->slot + 1, rumble ? " + rumble" : "");
+    report_sent(p, false);
+    if (!p->output_quiet) LOG("-> LED %u%s", p->slot + 1, rumble ? " + rumble" : "");
+    p->output_quiet = false;
+    bool dsu_rumble = p->rumble_big || p->rumble_small;
+    if (dsu_rumble != p->rumble_logged) {
+      if (dsu_rumble) LOG("-> rumble on (DSU)");
+      else LOG("-> rumble off (DSU, %u report%s resent after NOT_READY)", p->resends, p->resends == 1 ? "" : "s");
+      p->rumble_logged = dsu_rumble; p->resends = 0;
+    }
   }
 }
 
@@ -243,7 +301,7 @@ static void kbd_update(ds3_t *p) {
     kbd_enabled = !kbd_enabled;
     if (!kbd_enabled) kbd_release_all(slot);
     printf("\n"); LOG("Keyboard mode %s", kbd_enabled ? "ON" : "PAUSED");
-    p->need_output = true; request_send(p);
+    p->output_quiet = false; p->need_output = true; request_send(p);
   }
   ps_prev[slot] = now;
   if (!kbd_enabled || !kbd_ok) return;
@@ -338,7 +396,7 @@ static uint8_t *dsu_shared(uint8_t *p, int slot) {
   bool on = slot < MAX_PADS && pads[slot].used && pads[slot].intr_open;
   p[0] = (uint8_t)slot;
   p[1] = on ? 2 : 0;          // 2 = connected
-  p[2] = on ? 2 : 0;          // 2 = full gyro (approximate on the DS3)
+  p[2] = on ? 1 : 0;          // 1 = partial gyro: the DS3 has an accelerometer and one gyro axis
   p[3] = on ? 2 : 0;          // 2 = Bluetooth
   if (on) for (int i = 0; i < 6; i++) p[4 + i] = pads[slot].addr[i]; else memset(p + 4, 0, 6);
   p[10] = on ? dsu_battery(states[slot].battery) : 0;
@@ -361,10 +419,12 @@ static void dsu_send_data(int slot, const struct sockaddr_in *to) {
   if (b & (1u << B_R3))     b1 |= 0x04;
   if (b & (1u << B_L3))     b1 |= 0x02;
   if (b & (1u << B_SELECT)) b1 |= 0x01;
-  if (b & (1u << B_TRI))    b2 |= 0x80;
-  if (b & (1u << B_CIRC))   b2 |= 0x40;
-  if (b & (1u << B_CROSS))  b2 |= 0x20;
-  if (b & (1u << B_SQUARE)) b2 |= 0x10;
+  // Face buttons use Nintendo positions (Y left, B bottom, A right, X top), as in
+  // DS4Windows, BetterJoy and Dolphin: Square, Cross, Circle, Triangle.
+  if (b & (1u << B_SQUARE)) b2 |= 0x80;
+  if (b & (1u << B_CROSS))  b2 |= 0x40;
+  if (b & (1u << B_CIRC))   b2 |= 0x20;
+  if (b & (1u << B_TRI))    b2 |= 0x10;
   if (b & (1u << B_R1))     b2 |= 0x08;
   if (b & (1u << B_L1))     b2 |= 0x04;
   if (b & (1u << B_R2))     b2 |= 0x02;
@@ -374,9 +434,9 @@ static void dsu_send_data(int slot, const struct sockaddr_in *to) {
   *p++ = 0;                                         // touch button
   *p++ = s->lx; *p++ = (uint8_t)(255 - s->ly);      // DSU: positive Y is up
   *p++ = s->rx; *p++ = (uint8_t)(255 - s->ry);
-  // Analog: D-pad L, D, R, U; then Y(tri) B(circ) A(cross) X(square); R1 L1 R2 L2
+  // Analog: D-pad L, D, R, U; then square, cross, circle, triangle; R1 L1 R2 L2
   *p++ = s->pr[3]; *p++ = s->pr[2]; *p++ = s->pr[1]; *p++ = s->pr[0];
-  *p++ = s->pr[8]; *p++ = s->pr[9]; *p++ = s->pr[10]; *p++ = s->pr[11];
+  *p++ = s->pr[11]; *p++ = s->pr[10]; *p++ = s->pr[9]; *p++ = s->pr[8];
   *p++ = s->pr[7]; *p++ = s->pr[6]; *p++ = s->pr[5]; *p++ = s->pr[4];
   p += 12;                                          // 2 touch points (empty)
   uint64_t us = (uint64_t)btstack_run_loop_get_time_ms() * 1000u;
@@ -414,6 +474,41 @@ static void dsu_register(const struct sockaddr_in *from) {
   printf("\n"); LOG("DSU: client connected (%s:%u)", inet_ntoa(from->sin_addr), ntohs(from->sin_port));
 }
 
+// Rumble, as described in https://github.com/v1993/cemuhook-protocol (an extension to DSU).
+// Both messages start with the same 8-byte controller ID as a data request: flags, slot, MAC.
+// The DS3 has two motors: 0 is the left (big) one, 1 the right (small) one.
+#define DSU_RUMBLE_TIMEOUT_MS 5000   // stop a motor that hasn't been refreshed, as the protocol asks
+
+static int dsu_select_slot(const uint8_t *id) {
+  if (id[0] & 0x02) {                              // by MAC
+    for (int i = 0; i < MAX_PADS; i++)
+      if (pads[i].used && memcmp(pads[i].addr, id + 2, 6) == 0) return i;
+    return -1;
+  }
+  return id[1] < MAX_PADS ? id[1] : -1;            // by slot
+}
+
+static void dsu_rumble(int slot, uint8_t motor, uint8_t intensity) {
+  ds3_t *p = &pads[slot];
+  if (!p->used || !p->ctrl_open || motor > 1) return;
+  p->rumble_ms = btstack_run_loop_get_time_ms();
+  uint8_t big = motor == 0 ? intensity : p->rumble_big;
+  bool small = motor == 1 ? intensity != 0 : p->rumble_small;
+  if (big == p->rumble_big && small == p->rumble_small) return;
+  p->rumble_big = big; p->rumble_small = small;
+  if (!p->need_output) p->output_quiet = true;
+  p->need_output = true; request_send(p);
+}
+
+static void rumble_check_timeout(ds3_t *p) {
+  if (!p->rumble_big && !p->rumble_small) return;
+  if (btstack_run_loop_get_time_ms() - p->rumble_ms < DSU_RUMBLE_TIMEOUT_MS) return;
+  LOG("DSU: no rumble update for %d s, stopping the motors", DSU_RUMBLE_TIMEOUT_MS / 1000);
+  p->rumble_big = 0; p->rumble_small = false;
+  if (!p->need_output) p->output_quiet = true;
+  p->need_output = true; request_send(p);
+}
+
 static void dsu_on_readable(btstack_data_source_t *ds, btstack_data_source_callback_type_t type) {
   (void)ds; (void)type;
   uint8_t buf[256]; struct sockaddr_in from; socklen_t fl = sizeof from;
@@ -436,6 +531,16 @@ static void dsu_on_readable(btstack_data_source_t *ds, btstack_data_source_callb
       }
     } else if (msg == 0x100002) {                  // data subscription
       dsu_register(&from);
+    } else if (msg == 0x110001 && n >= 28) {       // motor count
+      int slot = dsu_select_slot(buf + 20);
+      if (slot >= 0) {
+        uint8_t *p = dsu_shared(dsu_begin(memset(pkt, 0, sizeof pkt), 0x110001), slot);
+        *p++ = (pads[slot].used && pads[slot].ctrl_open) ? 2 : 0;
+        dsu_finish_send(pkt, (size_t)(p - pkt), &from);
+      }
+    } else if (msg == 0x110002 && n >= 30) {       // set one motor
+      int slot = dsu_select_slot(buf + 20);
+      if (slot >= 0) dsu_rumble(slot, buf[28], buf[29]);
     }
     fl = sizeof from;
   }
@@ -465,10 +570,13 @@ static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint1
       if (p->reports++ == 0) { LOG("Receiving data from controller %u! (Ctrl-C to quit)", p->slot + 1); }
       decode(p->slot, packet + 1);
       dsu_broadcast(p->slot);
+      rumble_check_timeout(p);
       kbd_update(p);
       if ((p->reports % 5) == 0) print_state(p);
     } else if (channel == p->ctrl_cid) {
-      if (!(size == 1 && packet[0] == 0x00)) { stamp(); printf("<- control (%u):", size);
+      bool handshake = size == 1 && (packet[0] & 0xF0) == 0x00;   // HIDP HANDSHAKE, result in the low bits
+      if (handshake) on_handshake(p, packet[0] & 0x0F);
+      if (!(handshake && packet[0] <= 0x01)) { stamp(); printf("<- control (%u):", size);   // log all but SUCCESSFUL and NOT_READY
         for (int i = 0; i < size && i < 16; i++) printf(" %02X", packet[i]); printf("\n"); }
     }
     return;
@@ -513,7 +621,10 @@ static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint1
       if (!p) break;
       printf("\n");
       LOG("channel closed (controller %u)", p->slot + 1);
-      if (cid == p->ctrl_cid) { p->ctrl_open = false; p->ctrl_cid = 0; }
+      if (cid == p->ctrl_cid) {
+        p->ctrl_open = false; p->ctrl_cid = 0;
+        btstack_run_loop_remove_timer(&p->reply_timer); p->awaiting_reply = false;
+      }
       if (cid == p->intr_cid) { p->intr_open = false; p->intr_cid = 0; }
       if (!p->ctrl_open && !p->intr_open) { kbd_release_all(p->slot); p->used = false; memset(&states[p->slot], 0, sizeof states[0]); }
       break;
