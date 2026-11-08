@@ -338,7 +338,7 @@ static uint8_t *dsu_shared(uint8_t *p, int slot) {
   bool on = slot < MAX_PADS && pads[slot].used && pads[slot].intr_open;
   p[0] = (uint8_t)slot;
   p[1] = on ? 2 : 0;          // 2 = connected
-  p[2] = on ? 2 : 0;          // 2 = full gyro (approximate on the DS3)
+  p[2] = on ? 1 : 0;          // 1 = partial gyro: the DS3 has an accelerometer and one gyro axis
   p[3] = on ? 2 : 0;          // 2 = Bluetooth
   if (on) for (int i = 0; i < 6; i++) p[4 + i] = pads[slot].addr[i]; else memset(p + 4, 0, 6);
   p[10] = on ? dsu_battery(states[slot].battery) : 0;
