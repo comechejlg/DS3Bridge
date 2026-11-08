@@ -37,6 +37,10 @@ typedef struct {
   uint32_t         rumble_ms;     // time of the last DSU rumble message, for the timeout
   bool             rumble_logged; // DSU rumble was on when last logged
   bool             output_quiet;  // the pending output is only a DSU rumble change: don't log it
+  bool             awaiting_reply;// a SET_REPORT is out; the next one waits for the controller's handshake
+  bool             sent_enable;   // the SET_REPORT that's out is the enable (else an output report)
+  uint32_t         resends;       // reports resent after NOT_READY since the last rumble log
+  btstack_timer_source_t reply_timer; // resend after NOT_READY, or stop waiting for a lost handshake
   uint32_t         reports;
   uint8_t          slot;          // 0..3 -> LED 1..4
 } ds3_t;
@@ -71,6 +75,7 @@ static ds3_t *pad_new(hci_con_handle_t h, bd_addr_t a) {
   ds3_t *p = pad_by_handle(h);
   if (p) return p;
   for (int i = 0; i < MAX_PADS; i++) if (!pads[i].used) {
+    btstack_run_loop_remove_timer(&pads[i].reply_timer);   // before the memset clears its list link
     memset(&pads[i], 0, sizeof pads[i]);
     pads[i].used = true; pads[i].handle = h; pads[i].slot = (uint8_t)i;
     bd_addr_copy(pads[i].addr, a);
@@ -106,6 +111,41 @@ static void request_send(ds3_t *p) {
   if (p->ctrl_open) l2cap_request_can_send_now_event(p->ctrl_cid);
 }
 
+// The controller answers each SET_REPORT with a handshake. A report sent before it has answered
+// the previous one can be dropped with NOT_READY, so send one at a time, and resend after NOT_READY.
+#define REPLY_TIMEOUT_MS    250   // no handshake: assume it was lost and go on
+#define NOT_READY_RETRY_MS   20   // NOT_READY: send the latest state again after this
+
+static void reply_timer_fired(btstack_timer_source_t *ts) {
+  ds3_t *p = (ds3_t *)btstack_run_loop_get_timer_context(ts);
+  p->awaiting_reply = false;
+  if (p->need_enable || p->need_output) request_send(p);
+}
+static void arm_reply_timer(ds3_t *p, uint32_t ms) {
+  btstack_run_loop_remove_timer(&p->reply_timer);
+  btstack_run_loop_set_timer_handler(&p->reply_timer, reply_timer_fired);
+  btstack_run_loop_set_timer_context(&p->reply_timer, p);
+  btstack_run_loop_set_timer(&p->reply_timer, ms);
+  btstack_run_loop_add_timer(&p->reply_timer);
+}
+static void on_handshake(ds3_t *p, uint8_t result) {
+  if (!p->awaiting_reply) return;
+  if (result == 0x01) {                             // NOT_READY: the report was dropped
+    if (p->sent_enable) p->need_enable = true;
+    else if (!p->need_output) { p->need_output = true; p->output_quiet = true; }
+    p->resends++;
+    arm_reply_timer(p, NOT_READY_RETRY_MS);         // still waiting until the timer fires
+    return;
+  }
+  btstack_run_loop_remove_timer(&p->reply_timer);
+  p->awaiting_reply = false;
+  if (p->need_enable || p->need_output) request_send(p);
+}
+static void report_sent(ds3_t *p, bool enable) {
+  p->awaiting_reply = true; p->sent_enable = enable;
+  arm_reply_timer(p, REPLY_TIMEOUT_MS);
+}
+
 // Greeting: 300 ms after enabling -> LED + rumble; 600 ms later -> rumble off.
 // (If the output report arrives right after the enable, the controller answers NOT_READY and ignores it.)
 static void startup_step(btstack_timer_source_t *ts) {
@@ -128,14 +168,15 @@ static void start_greeting(void) {
 }
 
 static void ctrl_can_send(ds3_t *p) {
+  if (p->awaiting_reply) return;      // on_handshake() or the reply timer asks again
   if (p->need_enable) {
     // SET_REPORT | Feature 0xF4: Bluetooth operational mode.
     static const uint8_t enable[] = { 0x53, 0xF4, 0x42, 0x03, 0x00, 0x00 };
     l2cap_send(p->ctrl_cid, (uint8_t *)enable, sizeof enable);
     p->need_enable = false;
+    report_sent(p, true);
     LOG("-> enable (F4 42 03) sent");
     p->stage = 1; start_greeting();
-    if (p->need_output) request_send(p);
     return;
   }
   if (p->need_output) {
@@ -144,12 +185,14 @@ static void ctrl_can_send(ds3_t *p) {
     build_output(p, pkt + 1, rumble);
     l2cap_send(p->ctrl_cid, pkt, sizeof pkt);
     p->need_output = false;
+    report_sent(p, false);
     if (!p->output_quiet) LOG("-> LED %u%s", p->slot + 1, rumble ? " + rumble" : "");
     p->output_quiet = false;
     bool dsu_rumble = p->rumble_big || p->rumble_small;
     if (dsu_rumble != p->rumble_logged) {
-      LOG("-> rumble %s (DSU)", dsu_rumble ? "on" : "off");
-      p->rumble_logged = dsu_rumble;
+      if (dsu_rumble) LOG("-> rumble on (DSU)");
+      else LOG("-> rumble off (DSU, %u report%s resent after NOT_READY)", p->resends, p->resends == 1 ? "" : "s");
+      p->rumble_logged = dsu_rumble; p->resends = 0;
     }
   }
 }
@@ -531,7 +574,9 @@ static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint1
       kbd_update(p);
       if ((p->reports % 5) == 0) print_state(p);
     } else if (channel == p->ctrl_cid) {
-      if (!(size == 1 && packet[0] == 0x00)) { stamp(); printf("<- control (%u):", size);
+      bool handshake = size == 1 && (packet[0] & 0xF0) == 0x00;   // HIDP HANDSHAKE, result in the low bits
+      if (handshake) on_handshake(p, packet[0] & 0x0F);
+      if (!(handshake && packet[0] <= 0x01)) { stamp(); printf("<- control (%u):", size);   // log all but SUCCESSFUL and NOT_READY
         for (int i = 0; i < size && i < 16; i++) printf(" %02X", packet[i]); printf("\n"); }
     }
     return;
@@ -576,7 +621,10 @@ static void l2cap_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint1
       if (!p) break;
       printf("\n");
       LOG("channel closed (controller %u)", p->slot + 1);
-      if (cid == p->ctrl_cid) { p->ctrl_open = false; p->ctrl_cid = 0; }
+      if (cid == p->ctrl_cid) {
+        p->ctrl_open = false; p->ctrl_cid = 0;
+        btstack_run_loop_remove_timer(&p->reply_timer); p->awaiting_reply = false;
+      }
       if (cid == p->intr_cid) { p->intr_open = false; p->intr_cid = 0; }
       if (!p->ctrl_open && !p->intr_open) { kbd_release_all(p->slot); p->used = false; memset(&states[p->slot], 0, sizeof states[0]); }
       break;
