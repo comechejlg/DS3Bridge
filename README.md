@@ -7,7 +7,7 @@
 Since macOS Monterey, a DualShock 3 only works **by cable** (with an activation tool such as `ds3activate`). Over Bluetooth macOS shows an endless "enter a code" pairing window and drops the connection after ~30 s. DS3Bridge works around this **without disabling SIP, without kernel extensions and without Apple-only entitlements**, using:
 
 - a **cheap USB Bluetooth adapter** that macOS ignores and that DS3Bridge drives directly with its own Bluetooth stack ([BTstack](https://github.com/bluekitchen/btstack)). The built-in Mac Bluetooth keeps working normally for your other devices;
-- a **DSU (cemuhook) server** so emulators like Dolphin can read the controller (buttons, sticks, pressure, basic motion);
+- a **DSU (cemuhook) server** so emulators like Dolphin can read the controller (buttons, sticks, pressure, basic motion, rumble);
 - a **keyboard mode** that turns the controller into key presses, either through the signed [Karabiner virtual HID keyboard](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice) (needed for OpenEmu) or through synthetic key events.
 
 > ⚠️ **Status: experimental, personal project.** It works on the author's setup (see *Tested hardware*). See the [notes](#notes) below.
@@ -49,13 +49,11 @@ The DS3 never does real Bluetooth pairing (no link key). macOS 12+ requires auth
 
 ### 1. Get DS3Bridge
 
-**Option A — download it ready to use (Apple Silicon).** Download [`DS3Bridge-macOS-arm64.zip`](https://github.com/comechejlg/DS3Bridge/releases/latest/download/DS3Bridge-macOS-arm64.zip) from [Releases](https://github.com/comechejlg/DS3Bridge/releases), unzip it and move the `DS3Bridge` folder to where it will stay (for example your home folder). Homebrew and Xcode are not needed.
+**Option A — download the app (Apple Silicon).** Download [`DS3Bridge-macOS-arm64.dmg`](https://github.com/comechejlg/DS3Bridge/releases/latest/download/DS3Bridge-macOS-arm64.dmg) from [Releases](https://github.com/comechejlg/DS3Bridge/releases), open it and drag **DS3Bridge** to **Applications**. Homebrew and Xcode are not needed: the app has everything inside.
 
-The programs are not signed with an Apple Developer certificate, so macOS blocks files downloaded from the internet ("Apple could not verify…"). Remove that block once, in Terminal:
+The app is not signed with an Apple Developer certificate, so the first time macOS blocks it ("Apple could not verify…"). Open *System Settings → Privacy & Security*, scroll down and click **Open Anyway** next to DS3Bridge. You only do this once.
 
-```sh
-xattr -dr com.apple.quarantine ~/DS3Bridge
-```
+The first time, DS3Bridge opens its **Setup** list: run each step in order (Karabiner driver, keyboard service, start once to detect the adapter, pair the controller). After that, opening the app offers **Start**. In the steps below, wherever it says "double-click `scripts/…`", use the matching Setup step instead.
 
 **Option B — build from source (Homebrew).**
 
@@ -66,9 +64,9 @@ cd DS3Bridge
 ./build.sh
 ```
 
-`build.sh` downloads BTstack and the Karabiner client headers at **pinned, tested commits** and applies the small patches in `patches/`. `./build.sh --release` builds the same zip that is published in Releases (libusb built in).
+`build.sh` downloads BTstack and the Karabiner client headers at **pinned, tested commits** and applies the small patches in `patches/`. `./build.sh --release` builds the same app and disk image that are published in Releases (libusb built in; needs Python 3 for `dmgbuild`).
 
-Either way, you get three programs in `bin/`:
+Either way, there are three programs (in `bin/`, or inside the app):
 
 | Program | What it does |
 |---|---|
@@ -86,7 +84,7 @@ macOS may ask to give Terminal **Accessibility** permission; this is only needed
 
 Connect the DS3 with its USB cable and double-click **`scripts/Pair controller (USB cable).command`**. It must end with `OK: the controller now points to this adapter.` Unplug the cable.
 
-You only repeat this if you use the controller with a PS3 or another device.
+You only repeat this if you change the USB adapter, or use the controller with a PS3 or another device. If the plugged-in adapter isn't the one you paired with, DS3Bridge shows a warning when it starts.
 
 ### 4. Try it
 
@@ -94,15 +92,15 @@ Open **`scripts/Start DS3Bridge.command`** again and press **PS**. The controlle
 
 ### 5. Use it in games
 
-**Emulators with DSU support (Dolphin, Cemu, …)** — nothing else to install. *The DSU server has been verified with a protocol test client, but not yet confirmed inside Dolphin: feedback welcome.*
+**Emulators with DSU support (Dolphin, Cemu, …)** — nothing else to install. *Reported working with PCSX2 and RPCS3 (through SDL's DSU client), including rumble; not yet confirmed inside Dolphin: feedback welcome.*
 In Dolphin: *Controllers → Alternate Input Sources → DSU Client*, enable it and add server `127.0.0.1`, port `26760`. Then choose the device starting with `DSUClient/0/` in the controller configuration.
 
 **OpenEmu (and any app that reads the keyboard)** — keyboard mode. OpenEmu only accepts *real HID keyboards* during gameplay, so you need the Karabiner virtual keyboard:
 
 1. Double-click **`scripts/Install Karabiner driver.command`**. It downloads the official signed and notarized package, verifies the signature (Developer ID *Fumihiko Takayama*, team `G43BCU2T37`) and opens the installer. (Manual download from the official page: [Karabiner-DriverKit-VirtualHIDDevice-8.2.0.pkg](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/releases/download/v8.2.0/Karabiner-DriverKit-VirtualHIDDevice-8.2.0.pkg).)
 2. Approve the driver in *System Settings → General → Login Items & Extensions → Driver Extensions (ⓘ)* → enable **Karabiner-VirtualHIDDevice**.
-3. Double-click **`scripts/Install service.command`** (asks for your password once). It installs the Karabiner daemon and `vhidkbd` as system services and creates **DS3Bridge.app** in Applications.
-4. From now on just open **DS3Bridge** from Applications and press PS. No password. (The app points to this folder: if you move the repository, run `Install service` again.)
+3. Double-click **`scripts/Install service.command`** (asks for your password once). It installs the Karabiner daemon and `vhidkbd` as system services (and, when built from source, a **DS3Bridge.app** launcher in Applications).
+4. From now on just open **DS3Bridge** from Applications and press PS. No password. (A source build's launcher points to this folder: if you move the repository, run `Install service` again.)
 5. In OpenEmu: *Preferences → Controls*, choose the system, click each button and press it on the controller.
 
 Without the service, keyboard mode falls back to synthetic key events (needs Accessibility permission for Terminal): fine for most apps, **not** for OpenEmu gameplay.
@@ -139,7 +137,7 @@ Reports with other adapters/controllers are welcome — please open an issue.
 
 ## Uninstall
 
-`scripts/Uninstall service.command` removes the services and the app. To remove the Karabiner driver: `/Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager deactivate`.
+`scripts/Uninstall service.command` (or *Setup → Uninstall the keyboard service*) removes the services; then drag DS3Bridge.app to the Trash. To remove the Karabiner driver: `/Applications/.Karabiner-VirtualHIDDevice-Manager.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Manager deactivate`.
 
 ## Troubleshooting
 

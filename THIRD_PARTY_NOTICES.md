@@ -2,7 +2,7 @@
 
 DS3Bridge does **not** bundle third-party source code in this repository. `build.sh` downloads the following projects at pinned commits. Their licenses apply to them and to anything built from them.
 
-The prebuilt zip in Releases (`./build.sh --release`) includes the full license texts in its `licenses/` folder.
+The prebuilt app in Releases (`./build.sh --release`) includes the full license texts in `DS3Bridge.app/Contents/Resources/DS3Bridge/licenses/`.
 
 ## BTstack — BlueKitchen GmbH
 
@@ -14,7 +14,7 @@ The prebuilt zip in Releases (`./build.sh --release`) includes the full license 
 ## Realtek Bluetooth firmware
 
 - `rtl_bt/rtl8761bu_fw.bin` and `rtl_bt/rtl8761bu_config.bin` from linux-firmware (https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git, commit `73e8acec66b0a91513e0699567b7854f4161d8b5`). Copyright (c) 2010, Realtek Semiconductor Corporation.
-- License: `LICENCE.rtlwifi_firmware.txt` (redistribution in binary form, without modification). `build.sh` downloads it next to the firmware, and the release zip includes it in `firmware/`.
+- License: `LICENCE.rtlwifi_firmware.txt` (redistribution in binary form, without modification). `build.sh` downloads it next to the firmware, and the release app includes it next to the firmware.
 - Not stored in this repository; `build.sh` downloads the files and checks their SHA-256.
 
 ## libusb
