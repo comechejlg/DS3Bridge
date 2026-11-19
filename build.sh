@@ -127,7 +127,7 @@ if [[ $RELEASE == 1 ]]; then
     build/venv/bin/pip install -q "dmgbuild>=1.6,<2"
   fi
   tiffutil -cathidpicheck assets/dmg-background.png assets/dmg-background@2x.png -out build/dmg-background.tiff 2>/dev/null
-  build/venv/bin/dmgbuild -s assets/dmg-settings.py \
+  build/venv/bin/python3 -m dmgbuild -s assets/dmg-settings.py \
     -D app="$APP" -D background=build/dmg-background.tiff -D icon=assets/DS3Bridge.icns \
     "DS3Bridge" "dist/$NAME.dmg" >/dev/null
   echo "📦 dist/$NAME.dmg ($(du -h dist/$NAME.dmg | cut -f1))"
