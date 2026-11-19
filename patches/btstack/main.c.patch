@@ -10,7 +10,32 @@
  #include "bluetooth_company_id.h"
  #include "btstack_audio.h"
  #include "btstack_chipset_realtek.h"
-@@ -113,7 +115,9 @@
+@@ -77,6 +79,24 @@
+ 
+ #define USB_VENDOR_ID_REALTEK 0x0bda
+ 
++// DS3Bridge: Realtek-based dongles sold under another vendor ID. BTstack only recognises
++// Realtek's own vendor ID, so map these to the Realtek product ID of their chip (the same
++// list Linux's btusb uses). Without the firmware download they don't accept connections.
++#include <limits.h>
++#include <stdlib.h>
++#include <libgen.h>
++static char ds3_firmware_dir[PATH_MAX] = ".";
++static uint16_t ds3_realtek_product_id(uint16_t vid, uint16_t pid){
++    if (vid == USB_VENDOR_ID_REALTEK) return pid;
++    static const uint16_t oem[][3] = {
++        { 0x2357, 0x0604, 0x8771 },   // TP-Link UB500 / UB5A (RTL8761BUV)
++        { 0x0b05, 0x190e, 0x8771 },   // ASUS USB-BT500 (RTL8761BUV)
++    };
++    for (unsigned i = 0; i < sizeof(oem) / sizeof(oem[0]); i++)
++        if (oem[i][0] == vid && oem[i][1] == pid) return oem[i][2];
++    return 0;
++}
++
+ #define TLV_DB_PATH_PREFIX "/tmp/btstack_"
+ #define TLV_DB_PATH_POSTFIX ".tlv"
+ static char tlv_db_path[100];
+@@ -113,7 +133,9 @@
              // setup Zephyr chipset support
              hci_set_chipset(btstack_chipset_zephyr_instance());
              // sm required to setup static random Bluetooth address
@@ -20,7 +45,37 @@
              break;
          default:
              break;
-@@ -340,23 +344,15 @@
+@@ -148,9 +170,12 @@
+             printf("\n");
+ 
+             // set Product ID for Realtek Controllers and use Realtek-specific stack startup
+-            if (vendor_id == USB_VENDOR_ID_REALTEK) {
++            if (ds3_realtek_product_id(vendor_id, product_id) != 0) {
+                 printf("Realtek Controller - requires firmware and config download\n");
+-                btstack_chipset_realtek_set_product_id(product_id);
++                printf("Firmware folder: %s\n", ds3_firmware_dir);
++                btstack_chipset_realtek_set_product_id(ds3_realtek_product_id(vendor_id, product_id));
++                btstack_chipset_realtek_set_firmware_folder_path(ds3_firmware_dir);
++                btstack_chipset_realtek_set_config_folder_path(ds3_firmware_dir);
+                 hci_set_chipset(btstack_chipset_realtek_instance());
+                 hci_enable_custom_pre_init();
+             }
+@@ -277,6 +302,14 @@
+     const char * usb_path_string = NULL;
+     const char * log_file_path = NULL;
+ 
++    // DS3Bridge: Realtek firmware lives in <folder of ds3host>/../firmware
++    {
++        char exe[PATH_MAX];
++        if (realpath(argv[0], exe) != NULL) {
++            snprintf(ds3_firmware_dir, sizeof ds3_firmware_dir, "%s/../firmware", dirname(exe));
++        }
++    }
++
+     // parse command line parameters
+     while(true){
+         int c = getopt_long(argc, (char* const*)argv, short_options, long_options, NULL);
+@@ -340,23 +373,15 @@
          hci_transport_usb_set_bus_and_path(usb_bus, usb_path_len, usb_path);
      }
  

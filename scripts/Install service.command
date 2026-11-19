@@ -64,14 +64,18 @@ for s in karabiner-daemon vhidkbd; do
   fi
 done
 
-# App in Applications that opens the launcher
-rm -rf /Applications/DS3Bridge.app
-osacompile -o /Applications/DS3Bridge.app \
-  -e "do shell script \"open -a Terminal \" & quoted form of \"$ROOT/scripts/Start DS3Bridge.command\""
+# Built from source: create an app in Applications that opens the launcher.
+# (When this script runs from inside DS3Bridge.app, that app already does it.)
+if [[ "$ROOT" != *.app/Contents/Resources/* ]]; then
+  rm -rf /Applications/DS3Bridge.app
+  osacompile -o /Applications/DS3Bridge.app \
+    -e "do shell script \"open -a Terminal \" & quoted form of \"$ROOT/scripts/Start DS3Bridge.command\""
+fi
 
 for i in 1 2 3 4 5 6 7 8 9 10; do [ -S /var/run/ds3bridge.sock ] && break; sleep 1; done
 if [ -S /var/run/ds3bridge.sock ]; then
   echo; echo "✅ Installed. Open DS3Bridge from Applications: no password needed from now on."
+  echo "   (Close this window and continue with the next setup step.)"
 else
   echo; echo "⚠️  The service has not created its socket yet. Check /var/log/ds3bridge-vhidkbd.log"
 fi
