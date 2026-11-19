@@ -121,7 +121,8 @@ if [[ $RELEASE == 1 ]]; then
   # Disk image with a custom window (background, icon positions, link to Applications).
   # dmgbuild writes the window layout directly, so Finder scripting is not needed.
   echo "Building $NAME.dmg..."
-  if [ ! -x build/venv/bin/dmgbuild ]; then
+  if ! build/venv/bin/python3 -c "import dmgbuild" 2>/dev/null; then
+    rm -rf build/venv
     python3 -m venv build/venv
     build/venv/bin/pip install -q "dmgbuild>=1.6,<2"
   fi
