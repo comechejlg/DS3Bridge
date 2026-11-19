@@ -12,12 +12,15 @@ BTSTACK_URL=https://github.com/bluekitchen/btstack.git
 BTSTACK_COMMIT=e38553977a25fb0b55b383c72c289be0975f422c
 KARABINER_URL=https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice.git
 KARABINER_COMMIT=ac836ed8a974cd5182495251855cabdb762f50cb
+# Realtek Bluetooth firmware (for RTL8761B dongles such as the TP-Link UB500), from linux-firmware
+LINUX_FIRMWARE_URL=https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain
+LINUX_FIRMWARE_COMMIT=73e8acec66b0a91513e0699567b7854f4161d8b5
 
 RELEASE=0
 [[ "$1" == "--release" ]] && RELEASE=1
 
 if [[ "$1" == "--clean" ]]; then
-  rm -rf build bin dist
+  rm -rf build bin dist firmware
   echo "Clean."
   exit 0
 fi
@@ -41,6 +44,22 @@ fetch() {  # name url commit
 mkdir -p deps build bin
 fetch btstack "$BTSTACK_URL" "$BTSTACK_COMMIT"
 fetch karabiner-vhid "$KARABINER_URL" "$KARABINER_COMMIT"
+
+# Realtek firmware: ds3host loads it into Realtek dongles at startup (they don't accept
+# connections without it). Saved under the names BTstack looks for, and checked by SHA-256.
+fw() {  # linux-firmware path, file name for BTstack, sha256
+  if [ -f "firmware/$2" ] && [ "$(shasum -a 256 "firmware/$2" | cut -d' ' -f1)" = "$3" ]; then return; fi
+  echo "Downloading $1..."
+  curl -fsSL -o "firmware/$2.tmp" "$LINUX_FIRMWARE_URL/$1?id=$LINUX_FIRMWARE_COMMIT"
+  if [ "$(shasum -a 256 "firmware/$2.tmp" | cut -d' ' -f1)" != "$3" ]; then
+    rm -f "firmware/$2.tmp"; echo "❌ Unexpected checksum for $1"; exit 1
+  fi
+  mv "firmware/$2.tmp" "firmware/$2"
+}
+mkdir -p firmware
+fw rtl_bt/rtl8761bu_fw.bin     rtl8761bu_fw     1d7a9597349ad89344fa16c1913d3e39e9a12e966e417ca16871bc79bbe59edb
+fw rtl_bt/rtl8761bu_config.bin rtl8761bu_config 6c28a3f07c6a30ed208c4b64862a23f02b7d93543ea980edd24df16bab45095f
+fw LICENSES/LICENCE.rtlwifi_firmware.txt LICENCE.rtlwifi_firmware.txt a61351665b4f264f6c631364f85b907d8f8f41f8b369533ef4021765f9f3b62e
 
 # 1) ds3host: own Bluetooth host (BTstack + patches) + DSU + keyboard
 echo "Building ds3host..."
@@ -77,7 +96,7 @@ if [[ $RELEASE == 1 ]]; then
   NAME=DS3Bridge-macOS-arm64
   PKG=dist/DS3Bridge
   rm -rf dist && mkdir -p "$PKG/licenses"
-  cp -R bin scripts docs README.md README.es.md LICENSE THIRD_PARTY_NOTICES.md "$PKG/"
+  cp -R bin scripts docs firmware README.md README.es.md LICENSE THIRD_PARTY_NOTICES.md "$PKG/"
   cp licenses/* "$PKG/licenses/"
   cp deps/btstack/LICENSE "$PKG/licenses/BTstack.txt"
   cp "$(pkg-config libusb-1.0 --variable=prefix)/COPYING" "$PKG/licenses/libusb-LGPL-2.1.txt"

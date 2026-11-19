@@ -51,6 +51,7 @@ The DS3 is then "paired" over USB by writing the **adapter's** address into it (
 
 - **No USB reset / no `set_configuration`** on the dongle. With an old ISSC adapter behind a USB-C hub, these calls triggered a **macOS kernel panic** (`Kernel data abort`, panicked task `ds3host`).
 - **No BLE.** The tested adapter is Bluetooth 2.1. BTstack sent an LE command at startup, the adapter never answered, and the stack stalled: incoming connections then timed out (`status 0x10`). The build disables BLE (custom `btstack_config.h`, `stubs.c`, LE files excluded).
+- **Realtek dongles sold under another brand.** BTstack only downloads firmware into Realtek controllers with Realtek's own USB vendor ID (`0x0bda`). The TP-Link UB500/UB5A (`0x2357:0x0604`) and ASUS USB-BT500 (`0x0b05:0x190e`) use an RTL8761BU under their own IDs; DS3Bridge maps them to Realtek's product ID (`0x8771`), as Linux's `btusb` does. Without the firmware the adapter initialises but never reports the controller's connection request. `build.sh` downloads the firmware from linux-firmware (pinned commit, SHA-256 checked) into `firmware/`, and `ds3host` loads it from `<bin>/../firmware`.
 - **No HCI packet log by default.** BTstack's libusb port writes every Bluetooth packet to `/tmp/hci_dump.pklg`, which grows without limit. Now it is only written with `-l FILE`.
 
 ## 5. Reading the controller
@@ -95,4 +96,4 @@ So gameplay only reacts to a **HID keyboard device**. The solution is the signed
 | `src/ds3host/kbd.c` | Keyboard output: Karabiner socket or `CGEvent` fallback |
 | `src/vhidkbd/vhidkbd.cpp` | Root bridge to the Karabiner virtual keyboard |
 | `src/ds3bt/ds3bt.m` | USB pairing (`pair`) and the IOBluetooth experiments (`listen`, `connect`) kept for reference |
-| `patches/btstack/` | The three BTstack changes described above |
+| `patches/btstack/` | The BTstack changes described above |

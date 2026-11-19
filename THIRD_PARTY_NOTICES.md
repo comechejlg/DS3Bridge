@@ -11,6 +11,12 @@ The prebuilt zip in Releases (`./build.sh --release`) includes the full license 
 - `patches/btstack/*.patch` are modifications of BTstack files (`port/libusb/main.c`, `platform/libusb/hci_transport_h2_libusb.c`) and are distributed under BTstack's license. `src/ds3host/btstack_config.h` is derived from BTstack's `port/libusb/btstack_config.h`.
 - **Consequence:** the `ds3host` binary links BTstack, so it may only be used and distributed for non-commercial purposes.
 
+## Realtek Bluetooth firmware
+
+- `rtl_bt/rtl8761bu_fw.bin` and `rtl_bt/rtl8761bu_config.bin` from linux-firmware (https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git, commit `73e8acec66b0a91513e0699567b7854f4161d8b5`). Copyright (c) 2010, Realtek Semiconductor Corporation.
+- License: `LICENCE.rtlwifi_firmware.txt` (redistribution in binary form, without modification). `build.sh` downloads it next to the firmware, and the release zip includes it in `firmware/`.
+- Not stored in this repository; `build.sh` downloads the files and checks their SHA-256.
+
 ## libusb
 
 - https://libusb.info — GNU Lesser General Public License v2.1.

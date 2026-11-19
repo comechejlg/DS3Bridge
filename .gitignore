@@ -3,6 +3,7 @@ deps/
 build/
 bin/
 dist/
+firmware/
 *.o
 *.dSYM/
 # Logs

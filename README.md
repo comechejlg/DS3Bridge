@@ -30,7 +30,7 @@ The DS3 never does real Bluetooth pairing (no link key). macOS 12+ requires auth
 ## Requirements
 
 - A Mac with macOS 13 or newer (developed on macOS 26, Apple Silicon).
-- A **USB Bluetooth adapter**. Only an old ISSC `0x1131:0x1004` (Bluetooth 2.1) has been tested; other standard USB Bluetooth dongles *should* work, but that is unconfirmed — please report yours. On Apple Silicon, macOS does not use external adapters, so it stays free for DS3Bridge. A USB-C hub or USB-C → USB-A adapter if your Mac only has USB-C.
+- A **USB Bluetooth adapter**. Known to work: TP-Link UB500/UB5A (Bluetooth 5.0, Realtek; DS3Bridge loads its firmware), CSR8510 A10 (Bluetooth 4.0) and an old ISSC (Bluetooth 2.1). Some very old Bluetooth 2.0 dongles connect but never deliver the controller's input. See *Tested hardware*, and please report yours. On Apple Silicon, macOS does not use external adapters, so it stays free for DS3Bridge. A USB-C hub or USB-C → USB-A adapter if your Mac only has USB-C.
 - A DualShock 3 (or Sixaxis) and a **Mini-USB** cable (only for the one-time pairing).
 - Only to build from source: Xcode Command Line Tools (`xcode-select --install`) and [Homebrew](https://brew.sh) with `libusb` and `pkg-config`.
 
@@ -127,9 +127,12 @@ Without the service, keyboard mode falls back to synthetic key events (needs Acc
 ## Tested hardware
 
 - MacBook Air M1, macOS 26.7.1 (Tahoe)
-- USB Bluetooth adapter ISSC "EDRBTA" `0x1131:0x1004` (Bluetooth 2.1 + EDR) behind a USB-C hub
+- USB Bluetooth adapters:
+  - TP-Link UB5A `0x2357:0x0604` (Bluetooth 5.0, Realtek RTL8761BUV): works. DS3Bridge loads Realtek's firmware into it at startup; without it the adapter accepts no connections.
+  - ISSC "EDRBTA" `0x1131:0x1004` (Bluetooth 2.1 + EDR) behind a USB-C hub: works.
+  - Reported by a user: CSR8510 A10 `0x0a12:0x0001` (Bluetooth 4.0) works; an older CSR Bluetooth 2.0 dongle connects but never sends input reports (it didn't work with the DS3 on Windows either).
 - DualShock 3, OpenEmu-Silicon v23 (DeSmuME core) — keyboard mode confirmed in-game
-- DSU server: tested with a protocol client only
+- DSU server: reported working with PCSX2 and RPCS3 (SDL's DSU client), including rumble
 - Unplugging the USB adapter while DS3Bridge is running: no problems
 
 Reports with other adapters/controllers are welcome — please open an issue.

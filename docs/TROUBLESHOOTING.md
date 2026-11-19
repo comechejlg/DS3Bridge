@@ -8,6 +8,7 @@
 - If you see repeated `status 0x10` connection failures, the adapter may not support a command BTstack sent. Run `bin/ds3host -l /tmp/ds3.pklg`, reproduce the problem and open an issue with the log. The log contains your devices' Bluetooth addresses, so review it before sharing.
 
 **Pressing PS does nothing / LEDs keep blinking**
+- **Changed the USB adapter?** Every adapter has its own address. Start DS3Bridge once with the new adapter (it saves the new address), then pair again with the cable.
 - Pair again with the cable (`scripts/Pair controller (USB cable).command`). Using the controller with a PS3 or the Mac's own Bluetooth overwrites the stored address.
 - Make sure `ds3host` is running *before* you press PS. The controller only tries for a few seconds.
 

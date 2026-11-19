@@ -30,7 +30,7 @@ El DS3 nunca hace un emparejamiento Bluetooth real (no tiene clave de enlace). m
 ## Qué necesitas
 
 - Un Mac con macOS 13 o posterior (desarrollado en macOS 26, Apple Silicon).
-- Un **adaptador Bluetooth USB**. Solo se ha probado uno antiguo ISSC `0x1131:0x1004` (Bluetooth 2.1); otros adaptadores USB estándar *deberían* funcionar, pero no está confirmado: si pruebas el tuyo, cuéntalo. En Apple Silicon macOS no usa adaptadores externos, así que queda libre para DS3Bridge. Un hub USB-C o un adaptador USB-C a USB-A si tu Mac solo tiene USB-C.
+- Un **adaptador Bluetooth USB**. Funcionan: TP-Link UB500/UB5A (Bluetooth 5.0, Realtek; DS3Bridge le carga su firmware), CSR8510 A10 (Bluetooth 4.0) y uno antiguo ISSC (Bluetooth 2.1). Algunos adaptadores muy antiguos de Bluetooth 2.0 conectan pero nunca reciben los datos del mando. Mira *Hardware probado* y, si pruebas el tuyo, cuéntalo. En Apple Silicon macOS no usa adaptadores externos, así que queda libre para DS3Bridge. Un hub USB-C o un adaptador USB-C a USB-A si tu Mac solo tiene USB-C.
 - Un DualShock 3 (o Sixaxis) y un cable **Mini-USB** (solo para emparejarlo una vez).
 - Solo para compilarlo tú: las Command Line Tools de Xcode (`xcode-select --install`) y [Homebrew](https://brew.sh) con `libusb` y `pkg-config`.
 
@@ -128,9 +128,12 @@ El **botón PS** pausa o reanuda el modo teclado (LED 1 = activo, LED 4 = en pau
 ## Hardware probado
 
 - MacBook Air M1, macOS 26.7.1 (Tahoe)
-- Adaptador Bluetooth USB ISSC "EDRBTA" `0x1131:0x1004` (Bluetooth 2.1 + EDR) conectado a un hub USB-C
+- Adaptadores Bluetooth USB:
+  - TP-Link UB5A `0x2357:0x0604` (Bluetooth 5.0, Realtek RTL8761BUV): funciona. DS3Bridge le carga el firmware de Realtek al arrancar; sin él, el adaptador no acepta conexiones.
+  - ISSC "EDRBTA" `0x1131:0x1004` (Bluetooth 2.1 + EDR) conectado a un hub USB-C: funciona.
+  - Según un usuario: CSR8510 A10 `0x0a12:0x0001` (Bluetooth 4.0) funciona; uno CSR antiguo de Bluetooth 2.0 conecta pero nunca envía los datos del mando (tampoco funcionaba con el DS3 en Windows).
 - DualShock 3, OpenEmu-Silicon v23 (núcleo DeSmuME): modo teclado confirmado jugando
-- Servidor DSU: probado solo con un cliente de prueba del protocolo
+- Servidor DSU: según un usuario, funciona con PCSX2 y RPCS3 (cliente DSU de SDL), vibración incluida
 - Desenchufar el adaptador USB con DS3Bridge en marcha: sin problemas
 
 Se agradecen informes con otros adaptadores o mandos: abre un *issue*.
