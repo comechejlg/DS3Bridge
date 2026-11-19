@@ -101,6 +101,9 @@ if [[ $RELEASE == 1 ]]; then
   echo "Building DS3Bridge.app..."
   osacompile -o "$APP" assets/app/main.applescript
   cp assets/DS3Bridge.icns "$APP/Contents/Resources/applet.icns"
+  # Recent macOS prefers the applet's asset catalog (CFBundleIconName) over applet.icns.
+  rm -f "$APP/Contents/Resources/Assets.car"
+  plutil -remove CFBundleIconName "$APP/Contents/Info.plist" 2>/dev/null || true
   mkdir -p "$RES/licenses"
   cp -R bin scripts docs firmware README.md README.es.md LICENSE THIRD_PARTY_NOTICES.md "$RES/"
   cp licenses/* "$RES/licenses/"
