@@ -12,7 +12,7 @@ symlinks = {"Applications": "/Applications"}
 icon = defines["icon"]                    # volume icon while the image is mounted
 background = defines["background"]        # 640x400, with a @2x version (TIFF)
 
-window_rect = ((200, 140), (640, 400))
+window_rect = ((200, 140), (640, 428))   # 400 of content + the title bar
 default_view = "icon-view"
 show_status_bar = False
 show_tab_view = False
@@ -23,7 +23,7 @@ icon_size = 112
 text_size = 13
 arrange_by = None
 icon_locations = {
-    app_name: (170, 200),
-    "Applications": (470, 200),
+    app_name: (170, 188),
+    "Applications": (470, 188),
 }
 hide_extension = [app_name]
