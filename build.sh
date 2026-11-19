@@ -1,7 +1,7 @@
 #!/bin/zsh
 # DS3Bridge — downloads the dependencies (pinned versions), applies the patches and builds.
 # Usage:  ./build.sh            build everything into ./bin
-#         ./build.sh --release  same, with libusb built in, and package dist/DS3Bridge-macOS-arm64.zip
+#         ./build.sh --release  same, with libusb built in, and package dist/DS3Bridge-macOS-arm64.dmg
 #         ./build.sh --clean    delete build/, bin/ and dist/
 set -e
 cd "$(dirname "$0")"
@@ -16,6 +16,7 @@ KARABINER_COMMIT=ac836ed8a974cd5182495251855cabdb762f50cb
 LINUX_FIRMWARE_URL=https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain
 LINUX_FIRMWARE_COMMIT=73e8acec66b0a91513e0699567b7854f4161d8b5
 
+VERSION=1.1.0
 RELEASE=0
 [[ "$1" == "--release" ]] && RELEASE=1
 
@@ -88,19 +89,42 @@ clang -O2 -fobjc-arc -Wall src/ds3bt/ds3bt.m -o bin/ds3bt \
 echo
 echo "✅ Done: $(ls bin | tr '\n' ' ')"
 
-# 4) Release package (prebuilt zip for GitHub Releases)
+# 4) Release package: DS3Bridge.app with everything inside, in a disk image (GitHub Releases)
 if [[ $RELEASE == 1 ]]; then
   if otool -L bin/* | grep -q -E '/opt/homebrew|/usr/local/(opt|Cellar)'; then
     echo "❌ A binary still links a Homebrew library:"; otool -L bin/*; exit 1
   fi
   NAME=DS3Bridge-macOS-arm64
-  PKG=dist/DS3Bridge
-  rm -rf dist && mkdir -p "$PKG/licenses"
-  cp -R bin scripts docs firmware README.md README.es.md LICENSE THIRD_PARTY_NOTICES.md "$PKG/"
-  cp licenses/* "$PKG/licenses/"
-  cp deps/btstack/LICENSE "$PKG/licenses/BTstack.txt"
-  cp "$(pkg-config libusb-1.0 --variable=prefix)/COPYING" "$PKG/licenses/libusb-LGPL-2.1.txt"
-  cp deps/karabiner-vhid/LICENSE.md "$PKG/licenses/Karabiner-DriverKit-VirtualHIDDevice.md"
-  ( cd dist && ditto -c -k --keepParent DS3Bridge "$NAME.zip" )
-  echo "📦 dist/$NAME.zip ($(du -h dist/$NAME.zip | cut -f1))"
+  APP=dist/DS3Bridge.app
+  RES="$APP/Contents/Resources/DS3Bridge"
+  rm -rf dist && mkdir -p dist
+  echo "Building DS3Bridge.app..."
+  osacompile -o "$APP" assets/app/main.applescript
+  cp assets/DS3Bridge.icns "$APP/Contents/Resources/applet.icns"
+  mkdir -p "$RES/licenses"
+  cp -R bin scripts docs firmware README.md README.es.md LICENSE THIRD_PARTY_NOTICES.md "$RES/"
+  cp licenses/* "$RES/licenses/"
+  cp deps/btstack/LICENSE "$RES/licenses/BTstack.txt"
+  cp "$(pkg-config libusb-1.0 --variable=prefix)/COPYING" "$RES/licenses/libusb-LGPL-2.1.txt"
+  cp deps/karabiner-vhid/LICENSE.md "$RES/licenses/Karabiner-DriverKit-VirtualHIDDevice.md"
+  PL="$APP/Contents/Info.plist"
+  plutil -replace CFBundleIdentifier -string io.github.comechejlg.ds3bridge "$PL"
+  plutil -replace CFBundleShortVersionString -string "$VERSION" "$PL"
+  plutil -replace CFBundleVersion -string "$VERSION" "$PL"
+  plutil -replace NSHumanReadableCopyright -string "MIT License. Third-party licenses in Contents/Resources/DS3Bridge/licenses." "$PL"
+  xattr -cr "$APP"
+  codesign --force --deep --sign - "$APP"   # ad-hoc: the app is not notarized (no Apple Developer ID)
+
+  # Disk image with a custom window (background, icon positions, link to Applications).
+  # dmgbuild writes the window layout directly, so Finder scripting is not needed.
+  echo "Building $NAME.dmg..."
+  if [ ! -x build/venv/bin/dmgbuild ]; then
+    python3 -m venv build/venv
+    build/venv/bin/pip install -q "dmgbuild>=1.6,<2"
+  fi
+  tiffutil -cathidpicheck assets/dmg-background.png assets/dmg-background@2x.png -out build/dmg-background.tiff 2>/dev/null
+  build/venv/bin/dmgbuild -s assets/dmg-settings.py \
+    -D app="$APP" -D background=build/dmg-background.tiff -D icon=assets/DS3Bridge.icns \
+    "DS3Bridge" "dist/$NAME.dmg" >/dev/null
+  echo "📦 dist/$NAME.dmg ($(du -h dist/$NAME.dmg | cut -f1))"
 fi
