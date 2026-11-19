@@ -6,6 +6,10 @@ pkill -f "bin/ds3host" 2>/dev/null
 if [ ! -x "$ROOT/bin/ds3host" ]; then echo "Build first with ./build.sh"; read -k 1; exit 1; fi
 if [ -S /var/run/ds3bridge.sock ]; then
   echo "Keyboard mode: virtual HID keyboard (Karabiner)."
+elif [ -f /Library/LaunchDaemons/com.ds3bridge.vhidkbd.plist ]; then
+  echo "⚠️  The virtual keyboard service is installed but not running."
+  echo "   Run 'scripts/Install service.command' again (OpenEmu needs it)."
+  echo "   Until then, synthetic keys will be used."
 else
   echo "Note: the virtual keyboard service is not installed; synthetic keys will be used"
   echo "(fine for most apps, but not for OpenEmu gameplay)."

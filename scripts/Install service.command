@@ -15,6 +15,9 @@ sudo mkdir -p /usr/local/libexec/ds3bridge
 sudo cp "$ROOT/bin/vhidkbd" /usr/local/libexec/ds3bridge/vhidkbd
 sudo chown -R root:wheel /usr/local/libexec/ds3bridge
 sudo chmod 755 /usr/local/libexec/ds3bridge /usr/local/libexec/ds3bridge/vhidkbd
+# Files unzipped from a download carry macOS's quarantine flag, which stops the service
+# from running. Clear it on the installed copy.
+sudo xattr -c /usr/local/libexec/ds3bridge/vhidkbd
 
 sudo tee /Library/LaunchDaemons/com.ds3bridge.karabiner-daemon.plist >/dev/null <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -45,9 +48,20 @@ sudo tee /Library/LaunchDaemons/com.ds3bridge.vhidkbd.plist >/dev/null <<PLIST
 </dict></plist>
 PLIST
 
+# Restart both services. Right after a bootout, launchd sometimes refuses the bootstrap
+# ("Input/output error"), so retry for a few seconds and check that the service is loaded.
 for s in karabiner-daemon vhidkbd; do
   sudo launchctl bootout system/com.ds3bridge.$s 2>/dev/null || true
-  sudo launchctl bootstrap system /Library/LaunchDaemons/com.ds3bridge.$s.plist
+  for try in 1 2 3 4 5 6; do
+    sudo launchctl bootstrap system /Library/LaunchDaemons/com.ds3bridge.$s.plist 2>/dev/null || true
+    sudo launchctl print system/com.ds3bridge.$s >/dev/null 2>&1 && break
+    sleep 1
+  done
+  if ! sudo launchctl print system/com.ds3bridge.$s >/dev/null 2>&1; then
+    echo "❌ The service com.ds3bridge.$s could not be started. Run this script again,"
+    echo "   or restart the Mac and run it again."
+    read -k 1 "?Press any key to close..."; exit 1
+  fi
 done
 
 # App in Applications that opens the launcher
@@ -55,7 +69,7 @@ rm -rf /Applications/DS3Bridge.app
 osacompile -o /Applications/DS3Bridge.app \
   -e "do shell script \"open -a Terminal \" & quoted form of \"$ROOT/scripts/Start DS3Bridge.command\""
 
-sleep 3
+for i in 1 2 3 4 5 6 7 8 9 10; do [ -S /var/run/ds3bridge.sock ] && break; sleep 1; done
 if [ -S /var/run/ds3bridge.sock ]; then
   echo; echo "✅ Installed. Open DS3Bridge from Applications: no password needed from now on."
 else
