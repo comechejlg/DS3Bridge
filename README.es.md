@@ -84,7 +84,7 @@ macOS puede pedir permiso de **Accesibilidad** para Terminal: solo hace falta pa
 
 ### 3. Emparejar el mando (una vez)
 
-Conecta el DS3 con su cable USB y haz doble clic en **`scripts/Pair controller (USB cable).command`**. Debe terminar con `OK: the controller now points to this Mac.` (el mando ya apunta a este Mac). Desconecta el cable.
+Conecta el DS3 con su cable USB y haz doble clic en **`scripts/Pair controller (USB cable).command`**. Debe terminar con `OK: the controller now points to this adapter.` (el mando ya apunta a esta antena). Desconecta el cable.
 
 Solo hay que repetirlo si usas el mando con una PS3 u otro aparato.
 

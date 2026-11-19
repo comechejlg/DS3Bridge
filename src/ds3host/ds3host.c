@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <time.h>
 
@@ -537,6 +538,23 @@ static void save_adapter_address(bd_addr_t a) {
   fclose(f);
 }
 
+// The pairing script saves the adapter address it wrote into the controller. If another
+// adapter is plugged in now, the controller will keep looking for the old one: say so.
+static void check_paired_address(bd_addr_t a) {
+  const char *home = getenv("HOME");
+  if (!home) return;
+  char path[600], paired[32] = "";
+  snprintf(path, sizeof path, "%s/Library/Application Support/DS3Bridge/paired-address", home);
+  FILE *f = fopen(path, "r");
+  if (!f) return;
+  if (fgets(paired, sizeof paired, f)) paired[strcspn(paired, "\r\n")] = 0;
+  fclose(f);
+  if (paired[0] && strcasecmp(paired, bd_addr_to_str(a)) != 0) {
+    LOG("WARNING: the controller was last paired with another adapter (%s).", paired);
+    LOG("         Connect it by USB cable and pair again, or it won't connect to this one.");
+  }
+}
+
 static void hci_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint16_t size) {
   (void)channel; (void)size;
   if (type != HCI_EVENT_PACKET) return;
@@ -548,6 +566,7 @@ static void hci_handler(uint8_t type, uint16_t channel, uint8_t *packet, uint16_
         printf("\n");
         LOG("Adapter ready. Adapter Bluetooth address: %s", bd_addr_to_str(a));
         save_adapter_address(a);
+        check_paired_address(a);
         LOG("Waiting for the DualShock 3... (press PS)");
       }
       break;

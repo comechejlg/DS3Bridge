@@ -391,7 +391,7 @@ static int cmd_pair(const uint8_t mac[6]) {
         len = hid_get_feature(d, 0xF5, buf, 9);
         printf("  attempt %d: IOReturn 0x%08X\n", t + 1, r);
         if (len > 0) hexline("0xF5 read back", buf, (size_t)len);
-        if (len > 0 && mac_in(buf, len, mac)) { printf("  OK: the controller now points to this Mac.\n"); ok = 1; }
+        if (len > 0 && mac_in(buf, len, mac)) { printf("  OK: the controller now points to this adapter.\n"); ok = 1; }
       }
       IOHIDDeviceClose(d, 0);
     }

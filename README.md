@@ -84,7 +84,7 @@ macOS may ask to give Terminal **Accessibility** permission; this is only needed
 
 ### 3. Pair the controller (once)
 
-Connect the DS3 with its USB cable and double-click **`scripts/Pair controller (USB cable).command`**. It must end with `OK: the controller now points to this Mac.` Unplug the cable.
+Connect the DS3 with its USB cable and double-click **`scripts/Pair controller (USB cable).command`**. It must end with `OK: the controller now points to this adapter.` Unplug the cable.
 
 You only repeat this if you use the controller with a PS3 or another device.
 

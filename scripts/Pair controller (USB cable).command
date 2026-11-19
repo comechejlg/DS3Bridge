@@ -11,7 +11,10 @@ if [ ! -f "$ADDR_FILE" ]; then
 fi
 ADDR="$(head -1 "$ADDR_FILE")"
 echo "Adapter address: $ADDR"
-"$ROOT/bin/ds3bt" pair "$ADDR"
+if "$ROOT/bin/ds3bt" pair "$ADDR"; then
+  # Remember which adapter the controller points to, so DS3Bridge can warn after an adapter change.
+  echo "$ADDR" > "$HOME/Library/Application Support/DS3Bridge/paired-address"
+fi
 echo
 echo "If it says OK: unplug the cable, start DS3Bridge and press PS."
 read -k 1 "?Press any key to close..."
